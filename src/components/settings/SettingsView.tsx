@@ -59,7 +59,14 @@ export const SettingsView: React.FC = () => {
           <div className="divide-y divide-[#E5E7EB] pt-1">
             <div className="py-2.5 flex items-center justify-between text-sm">
               <span className="text-slate-500 font-medium">Application</span>
-              <span className="font-semibold text-slate-900">Deaf Contact Record</span>
+              <div className="flex items-center gap-2">
+                <img
+                  src="/icon-192.png"
+                  alt="App Icon"
+                  className="w-5 h-5 rounded-[6px] object-cover shadow-2xs"
+                />
+                <span className="font-semibold text-slate-900">Deaf Contact Record</span>
+              </div>
             </div>
             <div className="py-2.5 flex items-center justify-between text-sm">
               <span className="text-slate-500 font-medium">Version</span>

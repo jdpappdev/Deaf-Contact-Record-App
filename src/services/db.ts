@@ -15,6 +15,13 @@ export const STORES = {
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
+export function closeDatabase(): void {
+  if (dbPromise) {
+    dbPromise.then((db) => db.close()).catch(() => {});
+    dbPromise = null;
+  }
+}
+
 export function getDatabase(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
 
@@ -26,33 +33,42 @@ export function getDatabase(): Promise<IDBDatabase> {
 
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-    request.onupgradeneeded = (event) => {
+    request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
       const db = (event.target as IDBOpenDBRequest).result;
+      const oldVersion = event.oldVersion;
 
-      // People store
-      if (!db.objectStoreNames.contains(STORES.PEOPLE)) {
-        const peopleStore = db.createObjectStore(STORES.PEOPLE, { keyPath: 'id' });
-        peopleStore.createIndex('territoryId', 'territoryId', { unique: false });
-        peopleStore.createIndex('name', 'name', { unique: false });
+      // Version 1 Migration: Initial base schema
+      if (oldVersion < 1) {
+        // People store
+        if (!db.objectStoreNames.contains(STORES.PEOPLE)) {
+          const peopleStore = db.createObjectStore(STORES.PEOPLE, { keyPath: 'id' });
+          peopleStore.createIndex('territoryId', 'territoryId', { unique: false });
+          peopleStore.createIndex('name', 'name', { unique: false });
+        }
+
+        // Visits store
+        if (!db.objectStoreNames.contains(STORES.VISITS)) {
+          const visitsStore = db.createObjectStore(STORES.VISITS, { keyPath: 'id' });
+          visitsStore.createIndex('personId', 'personId', { unique: false });
+          visitsStore.createIndex('visitedAt', 'visitedAt', { unique: false });
+        }
+
+        // Territories store
+        if (!db.objectStoreNames.contains(STORES.TERRITORIES)) {
+          const territoriesStore = db.createObjectStore(STORES.TERRITORIES, { keyPath: 'id' });
+          territoriesStore.createIndex('name', 'name', { unique: false });
+        }
+
+        // Photos store (separated asset storage to keep main records lightweight)
+        if (!db.objectStoreNames.contains(STORES.PHOTOS)) {
+          db.createObjectStore(STORES.PHOTOS, { keyPath: 'id' });
+        }
       }
 
-      // Visits store
-      if (!db.objectStoreNames.contains(STORES.VISITS)) {
-        const visitsStore = db.createObjectStore(STORES.VISITS, { keyPath: 'id' });
-        visitsStore.createIndex('personId', 'personId', { unique: false });
-        visitsStore.createIndex('visitedAt', 'visitedAt', { unique: false });
-      }
-
-      // Territories store
-      if (!db.objectStoreNames.contains(STORES.TERRITORIES)) {
-        const territoriesStore = db.createObjectStore(STORES.TERRITORIES, { keyPath: 'id' });
-        territoriesStore.createIndex('name', 'name', { unique: false });
-      }
-
-      // Photos store (separated asset storage to keep main records lightweight)
-      if (!db.objectStoreNames.contains(STORES.PHOTOS)) {
-        db.createObjectStore(STORES.PHOTOS, { keyPath: 'id' });
-      }
+      // Explicit Version 2 Blueprint (reserved for future sync preparation):
+      // if (oldVersion < 2) {
+      //   // Will idempotently create sync_queue and tombstones without modifying existing stores
+      // }
     };
 
     request.onsuccess = () => {
@@ -60,6 +76,7 @@ export function getDatabase(): Promise<IDBDatabase> {
     };
 
     request.onerror = () => {
+      dbPromise = null;
       reject(request.error || new Error('Failed to open IndexedDB.'));
     };
 

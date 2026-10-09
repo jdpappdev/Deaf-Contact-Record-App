@@ -40,9 +40,11 @@ const MainAppContent: React.FC = () => {
       {/* Desktop Top Bar (visible on md: screens and above) */}
       <header className="hidden md:flex items-center justify-between px-6 py-3.5 bg-white border-b border-[#E7E3DA] sticky top-0 z-40 shadow-e2">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-[14px] bg-[#0F766E] text-white flex items-center justify-center font-bold text-sm shadow-sm">
-            D
-          </div>
+          <img
+            src="/icon-192.png"
+            alt="Deaf Contact Record"
+            className="w-9 h-9 rounded-[12px] object-cover shadow-sm ring-1 ring-black/5"
+          />
           <div>
             <h1 className="text-base font-bold text-[#14213D] tracking-tight leading-none">
               Deaf Contact Record

@@ -77,15 +77,184 @@ export function blobToDataUrl(blob: Blob): Promise<string> {
 
 // Helper to convert base64 dataUrl back into native Blob during JSON backup import
 export function dataUrlToBlob(dataUrl: string): Blob {
-  const [header, base64] = dataUrl.split(',');
-  const mime = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
-  const binary = atob(base64);
-  const len = binary.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binary.charCodeAt(i);
+  if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.includes(',')) {
+    throw new Error('Invalid photo asset: missing base64 data separator.');
   }
-  return new Blob([bytes], { type: mime });
+  const [header, base64] = dataUrl.split(',');
+  const mimeMatch = header.match(/:(.*?);/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+  if (!mime.startsWith('image/')) {
+    throw new Error(`Invalid photo asset: unsupported MIME type "${mime}".`);
+  }
+  try {
+    const binary = atob(base64.trim());
+    const len = binary.length;
+    if (len === 0) {
+      throw new Error('Photo payload contains zero bytes.');
+    }
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new Blob([bytes], { type: mime });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to decode photo image payload: ${msg}`);
+  }
+}
+
+/**
+ * Validates the entire backup structure and required record fields before modifying existing data.
+ * Throws a descriptive Error if any structure or field is invalid.
+ */
+export function validateBackupData(data: unknown): BackupData {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Invalid backup file: root must be a JSON object.');
+  }
+
+  const raw = data as Record<string, unknown>;
+
+  if (raw.version !== 1) {
+    throw new Error(`Unsupported backup version: ${String(raw.version)}. Expected version 1.`);
+  }
+
+  if (typeof raw.exportedAt !== 'string' || !raw.exportedAt.trim()) {
+    throw new Error('Invalid backup format: missing or invalid "exportedAt" timestamp.');
+  }
+
+  if (!Array.isArray(raw.people)) {
+    throw new Error('Invalid backup format: "people" must be an array.');
+  }
+
+  if (!Array.isArray(raw.visits)) {
+    throw new Error('Invalid backup format: "visits" must be an array.');
+  }
+
+  if (raw.territories !== undefined && !Array.isArray(raw.territories)) {
+    throw new Error('Invalid backup format: "territories" must be an array.');
+  }
+
+  if (raw.photos !== undefined && !Array.isArray(raw.photos)) {
+    throw new Error('Invalid backup format: "photos" must be an array.');
+  }
+
+  const now = new Date().toISOString();
+  const exportedAt = String(raw.exportedAt);
+
+  // Validate and normalize people
+  const validatedPeople: Person[] = [];
+  for (let i = 0; i < raw.people.length; i++) {
+    const p = raw.people[i] as Record<string, unknown>;
+    if (!p || typeof p !== 'object') {
+      throw new Error(`Invalid contact record at index ${i}: not an object.`);
+    }
+    if (typeof p.id !== 'string' || !p.id.trim()) {
+      throw new Error(`Contact at index ${i} is missing a valid "id".`);
+    }
+    if (typeof p.name !== 'string' || !p.name.trim()) {
+      throw new Error(`Contact "${String(p.id)}" is missing a valid "name".`);
+    }
+    if (p.latitude !== null && p.latitude !== undefined && (typeof p.latitude !== 'number' || isNaN(p.latitude))) {
+      throw new Error(`Contact "${String(p.id)}" has invalid "latitude".`);
+    }
+    if (p.longitude !== null && p.longitude !== undefined && (typeof p.longitude !== 'number' || isNaN(p.longitude))) {
+      throw new Error(`Contact "${String(p.id)}" has invalid "longitude".`);
+    }
+    validatedPeople.push({
+      id: String(p.id).trim(),
+      name: String(p.name).trim(),
+      photoRef: typeof p.photoRef === 'string' && p.photoRef.trim() ? p.photoRef.trim() : null,
+      latitude: typeof p.latitude === 'number' && !isNaN(p.latitude) ? p.latitude : null,
+      longitude: typeof p.longitude === 'number' && !isNaN(p.longitude) ? p.longitude : null,
+      territoryId: typeof p.territoryId === 'string' && p.territoryId.trim() ? p.territoryId.trim() : null,
+      messengerUrl: typeof p.messengerUrl === 'string' && p.messengerUrl.trim() ? p.messengerUrl.trim() : null,
+      createdAt: typeof p.createdAt === 'string' && p.createdAt.trim() ? p.createdAt : exportedAt,
+      updatedAt: typeof p.updatedAt === 'string' && p.updatedAt.trim() ? p.updatedAt : now,
+    });
+  }
+
+  // Validate and normalize visits
+  const validatedVisits: Visit[] = [];
+  for (let i = 0; i < raw.visits.length; i++) {
+    const v = raw.visits[i] as Record<string, unknown>;
+    if (!v || typeof v !== 'object') {
+      throw new Error(`Invalid visit record at index ${i}: not an object.`);
+    }
+    if (typeof v.id !== 'string' || !v.id.trim()) {
+      throw new Error(`Visit at index ${i} is missing a valid "id".`);
+    }
+    if (typeof v.personId !== 'string' || !v.personId.trim()) {
+      throw new Error(`Visit "${String(v.id)}" is missing a valid "personId".`);
+    }
+    if (typeof v.visitedAt !== 'string' || !v.visitedAt.trim()) {
+      throw new Error(`Visit "${String(v.id)}" is missing a valid "visitedAt" timestamp.`);
+    }
+    validatedVisits.push({
+      id: String(v.id).trim(),
+      personId: String(v.personId).trim(),
+      visitedAt: String(v.visitedAt).trim(),
+      remarks: typeof v.remarks === 'string' ? v.remarks : '',
+      createdAt: typeof v.createdAt === 'string' && v.createdAt.trim() ? v.createdAt : exportedAt,
+      updatedAt: typeof v.updatedAt === 'string' && v.updatedAt.trim() ? v.updatedAt : now,
+    });
+  }
+
+  // Validate and normalize territories
+  const rawTerritories = (raw.territories || []) as unknown[];
+  const validatedTerritories: Territory[] = [];
+  for (let i = 0; i < rawTerritories.length; i++) {
+    const t = rawTerritories[i] as Record<string, unknown>;
+    if (!t || typeof t !== 'object') {
+      throw new Error(`Invalid territory record at index ${i}: not an object.`);
+    }
+    if (typeof t.id !== 'string' || !t.id.trim()) {
+      throw new Error(`Territory at index ${i} is missing a valid "id".`);
+    }
+    if (typeof t.name !== 'string' || !t.name.trim()) {
+      throw new Error(`Territory "${String(t.id)}" is missing a valid "name".`);
+    }
+    validatedTerritories.push({
+      id: String(t.id).trim(),
+      name: String(t.name).trim(),
+      createdAt: typeof t.createdAt === 'string' && t.createdAt.trim() ? t.createdAt : exportedAt,
+      updatedAt: typeof t.updatedAt === 'string' && t.updatedAt.trim() ? t.updatedAt : now,
+    });
+  }
+
+  // Validate and normalize photos
+  const rawPhotos = (raw.photos || []) as unknown[];
+  const validatedPhotos: PhotoAsset[] = [];
+  for (let i = 0; i < rawPhotos.length; i++) {
+    const ph = rawPhotos[i] as Record<string, unknown>;
+    if (!ph || typeof ph !== 'object') {
+      throw new Error(`Invalid photo asset at index ${i}: not an object.`);
+    }
+    if (typeof ph.id !== 'string' || !ph.id.trim()) {
+      throw new Error(`Photo at index ${i} is missing a valid "id".`);
+    }
+    if (typeof ph.mimeType !== 'string' || !ph.mimeType.startsWith('image/')) {
+      throw new Error(`Photo "${String(ph.id)}" has an invalid or missing image "mimeType".`);
+    }
+    if (!ph.blob && (!ph.dataUrl || typeof ph.dataUrl !== 'string')) {
+      throw new Error(`Photo "${String(ph.id)}" does not contain valid image binary or dataUrl.`);
+    }
+    validatedPhotos.push({
+      id: String(ph.id).trim(),
+      blob: ph.blob instanceof Blob ? ph.blob : undefined,
+      dataUrl: typeof ph.dataUrl === 'string' ? ph.dataUrl : undefined,
+      mimeType: String(ph.mimeType).trim(),
+      createdAt: typeof ph.createdAt === 'string' && ph.createdAt.trim() ? ph.createdAt : exportedAt,
+    });
+  }
+
+  return {
+    version: 1,
+    exportedAt,
+    people: validatedPeople,
+    visits: validatedVisits,
+    territories: validatedTerritories,
+    photos: validatedPhotos,
+  };
 }
 
 // Photo Asset Service - stores original intact Blob in IndexedDB without canvas transformation
@@ -299,6 +468,13 @@ export const territoryService = {
 
 // Backup and Restore Service
 export const backupService = {
+  // Keeps track of the last in-memory pre-restore safety snapshot
+  _lastPreRestoreSnapshot: null as BackupData | null,
+
+  getLastSafetySnapshot(): BackupData | null {
+    return this._lastPreRestoreSnapshot;
+  },
+
   async exportData(): Promise<BackupData> {
     const [people, visits, territories, rawPhotos] = await Promise.all([
       getAllFromStore<Person>(STORES.PEOPLE),
@@ -311,13 +487,22 @@ export const backupService = {
     const photos: PhotoAsset[] = await Promise.all(
       rawPhotos.map(async (p) => {
         if (p.blob) {
-          const dataUrl = await blobToDataUrl(p.blob);
-          return {
-            id: p.id,
-            dataUrl,
-            mimeType: p.mimeType,
-            createdAt: p.createdAt,
-          };
+          try {
+            const dataUrl = await blobToDataUrl(p.blob);
+            return {
+              id: p.id,
+              dataUrl,
+              mimeType: p.mimeType,
+              createdAt: p.createdAt,
+            };
+          } catch (err) {
+            console.warn(`Failed to serialize photo asset "${p.id}" to dataUrl:`, err);
+            return {
+              id: p.id,
+              mimeType: p.mimeType,
+              createdAt: p.createdAt,
+            };
+          }
         }
         return p;
       })
@@ -333,15 +518,36 @@ export const backupService = {
     };
   },
 
-  async importData(data: BackupData, mode: 'merge' | 'replace' = 'replace'): Promise<{ importedCount: number }> {
-    if (!data || data.version !== 1 || !Array.isArray(data.people) || !Array.isArray(data.visits)) {
-      throw new Error('Invalid backup file format or missing data structures.');
+  async importData(data: unknown, mode: 'merge' | 'replace' = 'replace'): Promise<{ importedCount: number }> {
+    // 1. Strictly validate and normalize the entire backup structure before touching storage
+    const validData = validateBackupData(data);
+
+    // 2. Pre-process and convert photos prior to opening the database transaction
+    // If any base64 payload fails to decode, it fails safely before touching IndexedDB
+    const preparedPhotos: { id: string; blob: Blob; mimeType: string; createdAt: string }[] = [];
+    for (const photo of validData.photos || []) {
+      const blob = photo.blob || (photo.dataUrl ? dataUrlToBlob(photo.dataUrl) : undefined);
+      if (blob) {
+        preparedPhotos.push({
+          id: photo.id,
+          blob,
+          mimeType: photo.mimeType,
+          createdAt: photo.createdAt,
+        });
+      }
     }
 
+    // 3. Take an automatic in-memory safety snapshot before replacing existing data
     if (mode === 'replace') {
-      await clearAllStores();
+      try {
+        this._lastPreRestoreSnapshot = await this.exportData();
+      } catch (snapErr) {
+        console.warn('Could not take pre-restore safety snapshot:', snapErr);
+      }
     }
 
+    // 4. Perform clear (if replace mode) AND puts within a single atomic IndexedDB transaction
+    // If any error occurs or the transaction is aborted, the entire operation rolls back atomically.
     const db = await getDatabase();
     const tx = db.transaction([STORES.PEOPLE, STORES.VISITS, STORES.TERRITORIES, STORES.PHOTOS], 'readwrite');
 
@@ -350,30 +556,30 @@ export const backupService = {
     const territoriesStore = tx.objectStore(STORES.TERRITORIES);
     const photosStore = tx.objectStore(STORES.PHOTOS);
 
-    for (const terr of data.territories || []) {
+    if (mode === 'replace') {
+      peopleStore.clear();
+      visitsStore.clear();
+      territoriesStore.clear();
+      photosStore.clear();
+    }
+
+    for (const terr of validData.territories || []) {
       territoriesStore.put(terr);
     }
-    for (const photo of data.photos || []) {
-      const blob = photo.blob || (photo.dataUrl ? dataUrlToBlob(photo.dataUrl) : undefined);
-      if (blob) {
-        photosStore.put({
-          id: photo.id,
-          blob,
-          mimeType: photo.mimeType,
-          createdAt: photo.createdAt,
-        });
-      }
+    for (const photo of preparedPhotos) {
+      photosStore.put(photo);
     }
-    for (const person of data.people || []) {
+    for (const person of validData.people || []) {
       peopleStore.put(person);
     }
-    for (const visit of data.visits || []) {
+    for (const visit of validData.visits || []) {
       visitsStore.put(visit);
     }
 
     return new Promise((resolve, reject) => {
-      tx.oncomplete = () => resolve({ importedCount: (data.people || []).length });
-      tx.onerror = () => reject(tx.error);
+      tx.oncomplete = () => resolve({ importedCount: (validData.people || []).length });
+      tx.onerror = () => reject(tx.error || new Error('Transaction failed during data import.'));
+      tx.onabort = () => reject(tx.error || new Error('Transaction aborted during data import. Existing data preserved.'));
     });
   },
 
