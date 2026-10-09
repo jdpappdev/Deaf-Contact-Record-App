@@ -182,339 +182,349 @@ export const RecordDetail: React.FC<RecordDetailProps> = ({ person, onBack }) =>
   };
 
   return (
-    <div className="pb-28">
+    <div className="pb-28 md:pb-12">
       {/* Header: back arrow and a "⋯" menu, all tap targets at least 44px */}
-      <div className="sticky top-0 z-30 bg-white border-b border-[#E7E3DA] px-4 py-3 flex items-center justify-between shadow-e2">
-        <button
-          type="button"
-          onClick={onBack}
-          className="min-h-[44px] px-3 -ml-2 text-[#14213D] hover:text-[#0F766E] rounded-[14px] flex items-center gap-1.5 transition-colors font-semibold text-base"
-        >
-          <ArrowLeft className="w-5 h-5 stroke-[2]" />
-          <span>Contacts</span>
-        </button>
-
-        {/* Overflow "⋯" menu in header */}
-        <div className="relative">
+      <div className="sticky top-0 md:top-[58px] lg:top-0 z-30 bg-white border-b border-[#E7E3DA] px-4 sm:px-6 py-3 shadow-e2">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
           <button
             type="button"
-            onClick={() => setIsHeaderMenuOpen(!isHeaderMenuOpen)}
-            className="min-h-[44px] min-w-[44px] p-2 text-[#5B6470] hover:text-[#14213D] hover:bg-slate-100 rounded-[14px] flex items-center justify-center transition-colors"
-            aria-label="Contact options"
+            onClick={onBack}
+            className="min-h-[44px] px-3 -ml-2 text-[#14213D] hover:text-[#0F766E] rounded-[14px] flex items-center gap-1.5 transition-colors font-semibold text-base"
           >
-            <MoreVertical className="w-5 h-5" />
+            <ArrowLeft className="w-5 h-5 stroke-[2]" />
+            <span>Contacts</span>
           </button>
 
-          {isHeaderMenuOpen && (
-            <>
-              <div
-                className="fixed inset-0 z-40"
-                onClick={() => setIsHeaderMenuOpen(false)}
-              />
-              <div
-                className="absolute right-0 top-full mt-1 z-50 w-44 bg-white rounded-[16px] border border-[#E7E3DA] shadow-e3 py-1.5 overflow-hidden animate-in fade-in duration-100"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsHeaderMenuOpen(false);
-                    setIsEditingContact(true);
-                  }}
-                  className="w-full min-h-[44px] px-4 py-2 text-left text-sm font-semibold text-[#14213D] hover:bg-slate-50 flex items-center gap-2.5 transition-colors"
-                >
-                  <Edit2 className="w-4 h-4 text-[#5B6470]" />
-                  <span>Edit contact</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsHeaderMenuOpen(false);
-                    setShowDeleteContactDialog(true);
-                  }}
-                  className="w-full min-h-[44px] px-4 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4 text-red-500" />
-                  <span>Delete contact</span>
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+          {/* Overflow "⋯" menu in header */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsHeaderMenuOpen(!isHeaderMenuOpen)}
+              className="min-h-[44px] min-w-[44px] p-2 text-[#5B6470] hover:text-[#14213D] hover:bg-slate-100 rounded-[14px] flex items-center justify-center transition-colors"
+              aria-label="Contact options"
+            >
+              <MoreVertical className="w-5 h-5" />
+            </button>
 
-      <div className="max-w-3xl mx-auto px-4 pt-8 space-y-4">
-        {/* 1. Profile: avatar (72px) overlaps the top edge of the profile card */}
-        <div className="relative bg-white rounded-[16px] border border-[#E7E3DA] shadow-e1 p-5 pt-11">
-          {/* Overlapping 72px avatar */}
-          <div
-            onClick={handleOpenFullPhoto}
-            className={`absolute -top-9 left-5 ${person.photoRef ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''}`}
-            title={person.photoRef ? 'Tap to view full photo' : undefined}
-          >
-            <div className="rounded-full p-1 bg-white shadow-e2 border border-[#E7E3DA]/60 inline-block">
-              <Avatar photoRef={person.photoRef} name={person.name} size="72" />
-            </div>
-          </div>
-
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold text-[#14213D] tracking-tight leading-tight truncate">
-              {person.name}
-            </h1>
-            <div className="flex items-center gap-1.5 mt-1.5 text-sm text-[#5B6470] font-normal">
-              <MapPin className="w-4 h-4 text-[#0F766E] shrink-0" />
-              <span>Territory:</span>
-              <span className="font-semibold text-[#14213D]">
-                {territory ? territory.name : 'Unassigned'}
-              </span>
-            </div>
-            {person.messengerUrl && (
-              <div className="flex items-center gap-1.5 mt-1 text-sm text-[#5B6470] font-normal">
-                <MessageCircle className="w-4 h-4 text-[#0F766E] shrink-0" />
-                <span className="truncate max-w-[220px] sm:max-w-sm">{person.messengerUrl}</span>
-              </div>
+            {isHeaderMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsHeaderMenuOpen(false)}
+                />
+                <div
+                  className="absolute right-0 top-full mt-1 z-50 w-44 bg-white rounded-[16px] border border-[#E7E3DA] shadow-e3 py-1.5 overflow-hidden animate-in fade-in duration-100"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsHeaderMenuOpen(false);
+                      setIsEditingContact(true);
+                    }}
+                    className="w-full min-h-[44px] px-4 py-2 text-left text-sm font-semibold text-[#14213D] hover:bg-slate-50 flex items-center gap-2.5 transition-colors"
+                  >
+                    <Edit2 className="w-4 h-4 text-[#5B6470]" />
+                    <span>Edit contact</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsHeaderMenuOpen(false);
+                      setShowDeleteContactDialog(true);
+                    }}
+                    className="w-full min-h-[44px] px-4 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                    <span>Delete contact</span>
+                  </button>
+                </div>
+              </>
             )}
           </div>
         </div>
+      </div>
 
-        {/* 2. Primary Actions: sit in a raised row (e1) */}
-        <div className="grid grid-cols-3 gap-2.5 bg-white p-2.5 rounded-[16px] border border-[#E7E3DA] shadow-e1">
-          {/* Message Action */}
-          {person.messengerUrl ? (
-            <a
-              href={getExternalUrl(person.messengerUrl) || '#'}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={handleOpenMessenger}
-              className="h-[52px] min-h-[44px] px-2 sm:px-4 bg-[#F3F1EC] hover:bg-slate-100 border border-[#E7E3DA] rounded-[14px] flex items-center justify-center gap-2 text-[#14213D] font-semibold text-sm sm:text-base transition-colors"
-            >
-              <MessageCircle className="w-5 h-5 text-[#0F766E] shrink-0" />
-              <span>Message</span>
-            </a>
-          ) : (
-            <button
-              type="button"
-              onClick={() => handleOpenMessenger()}
-              className="h-[52px] min-h-[44px] px-2 sm:px-4 bg-[#F3F1EC]/60 hover:bg-[#F3F1EC] border border-[#E7E3DA] rounded-[14px] flex items-center justify-center gap-2 text-[#5B6470] font-semibold text-sm sm:text-base transition-colors"
-            >
-              <MessageCircle className="w-5 h-5 text-[#5B6470]/60 shrink-0" />
-              <span>Message</span>
-            </button>
-          )}
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* Left Column on Desktop: Profile, Actions, Location */}
+          <div className="lg:col-span-5 xl:col-span-5 space-y-4 lg:sticky lg:top-[74px]">
+            {/* 1. Profile: avatar (72px) overlaps the top edge of the profile card */}
+            <div className="relative bg-white rounded-[16px] border border-[#E7E3DA] shadow-e1 p-5 pt-11">
+              {/* Overlapping 72px avatar */}
+              <div
+                onClick={handleOpenFullPhoto}
+                className={`absolute -top-9 left-5 ${person.photoRef ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''}`}
+                title={person.photoRef ? 'Tap to view full photo' : undefined}
+              >
+                <div className="rounded-full p-1 bg-white shadow-e2 border border-[#E7E3DA]/60 inline-block">
+                  <Avatar photoRef={person.photoRef} name={person.name} size="72" />
+                </div>
+              </div>
 
-          {/* Add Visit Action */}
-          <PrimaryButton
-            onClick={() => setIsAddingVisit(true)}
-            icon={<Plus className="w-5 h-5 stroke-[2.5] shrink-0" />}
-            className="!px-2 sm:!px-4 !h-[52px] !min-h-[44px] !text-sm sm:!text-base"
-          >
-            Add visit
-          </PrimaryButton>
-
-          {/* Maps Action */}
-          {person.latitude !== null && person.longitude !== null ? (
-            <a
-              href={getMapsUrl(person.latitude, person.longitude)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="h-[52px] min-h-[44px] px-2 sm:px-4 bg-[#F3F1EC] hover:bg-slate-100 border border-[#E7E3DA] rounded-[14px] flex items-center justify-center gap-2 text-[#14213D] font-semibold text-sm sm:text-base transition-colors"
-            >
-              <MapPin className="w-5 h-5 text-[#0F766E] shrink-0" />
-              <span>Maps</span>
-            </a>
-          ) : (
-            <button
-              type="button"
-              onClick={handleUpdateLocation}
-              disabled={isLocating}
-              className="h-[52px] min-h-[44px] px-2 sm:px-4 bg-[#F3F1EC]/60 hover:bg-[#F3F1EC] border border-[#E7E3DA] rounded-[14px] flex items-center justify-center gap-2 text-[#5B6470] font-semibold text-sm sm:text-base transition-colors disabled:opacity-50"
-            >
-              <MapPin className="w-5 h-5 text-[#5B6470]/60 shrink-0" />
-              <span>Maps</span>
-            </button>
-          )}
-        </div>
-
-        {/* 3. Visit History Section */}
-        <div className="bg-white rounded-[16px] border border-[#E7E3DA] shadow-e1 p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-[#14213D] flex items-center gap-2">
-                <Clock className="w-4 h-4 text-[#0F766E]" />
-                Visit history
-              </h2>
-              <span className="text-sm font-mono font-medium text-[#5B6470]">
-                ({visits.length})
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setIsAddingVisit(true)}
-              className="min-h-[44px] px-3.5 py-2 text-sm font-semibold text-[#0F766E] hover:bg-[#0F766E]/10 rounded-[12px] flex items-center gap-1.5 transition-colors"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>Add visit</span>
-            </button>
-          </div>
-
-          {visits.length === 0 ? (
-            <div className="py-8 text-center text-[#5B6470]">
-              <Calendar className="w-8 h-8 mx-auto text-[#5B6470]/40 stroke-[1.5] mb-2" />
-              <p className="text-base font-semibold text-[#14213D]">No visits recorded yet</p>
-              <p className="text-sm text-[#5B6470] mt-0.5">
-                Record your first visit after speaking with this contact.
-              </p>
-              <div className="mt-4">
-                <PrimaryButton
-                  onClick={() => setIsAddingVisit(true)}
-                  icon={<Plus className="w-5 h-5 stroke-[2.5]" />}
-                >
-                  Record first visit
-                </PrimaryButton>
+              <div className="min-w-0">
+                <h1 className="text-2xl font-bold text-[#14213D] tracking-tight leading-tight truncate">
+                  {person.name}
+                </h1>
+                <div className="flex items-center gap-1.5 mt-1.5 text-sm text-[#5B6470] font-normal">
+                  <MapPin className="w-4 h-4 text-[#0F766E] shrink-0" />
+                  <span>Territory:</span>
+                  <span className="font-semibold text-[#14213D]">
+                    {territory ? territory.name : 'Unassigned'}
+                  </span>
+                </div>
+                {person.messengerUrl && (
+                  <div className="flex items-center gap-1.5 mt-1 text-sm text-[#5B6470] font-normal">
+                    <MessageCircle className="w-4 h-4 text-[#0F766E] shrink-0" />
+                    <span className="truncate max-w-[220px] sm:max-w-sm">{person.messengerUrl}</span>
+                  </div>
+                )}
               </div>
             </div>
-          ) : (
-            <div className="space-y-3 divide-y divide-[#E7E3DA]">
-              {visits.map((visit) => {
-                const visitDateStr = new Date(visit.visitedAt).toLocaleDateString(undefined, {
-                  weekday: 'short',
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                });
-                const isVisitMenuOpen = openVisitMenuId === visit.id;
 
-                return (
-                  <div key={visit.id} className="pt-3.5 first:pt-0 group">
-                    <div className="flex items-center justify-between text-sm text-[#5B6470] mb-1.5">
-                      <div className="flex items-center gap-2 font-bold text-[#14213D]">
-                        <Calendar className="w-4 h-4 text-[#0F766E]" />
-                        <span>{visitDateStr}</span>
-                      </div>
+            {/* 2. Primary Actions: sit in a raised row (e1) */}
+            <div className="grid grid-cols-3 gap-2 sm:gap-2.5 bg-white p-2.5 rounded-[16px] border border-[#E7E3DA] shadow-e1">
+              {/* Message Action */}
+              {person.messengerUrl ? (
+                <a
+                  href={getExternalUrl(person.messengerUrl) || '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={handleOpenMessenger}
+                  className="h-[52px] min-h-[44px] px-1.5 sm:px-3 bg-[#F3F1EC] hover:bg-slate-100 border border-[#E7E3DA] rounded-[14px] flex items-center justify-center gap-1.5 sm:gap-2 text-[#14213D] font-semibold text-xs sm:text-sm md:text-base transition-colors"
+                >
+                  <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 text-[#0F766E] shrink-0" />
+                  <span className="truncate">Message</span>
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleOpenMessenger()}
+                  className="h-[52px] min-h-[44px] px-1.5 sm:px-3 bg-[#F3F1EC]/60 hover:bg-[#F3F1EC] border border-[#E7E3DA] rounded-[14px] flex items-center justify-center gap-1.5 sm:gap-2 text-[#5B6470] font-semibold text-xs sm:text-sm md:text-base transition-colors"
+                >
+                  <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 text-[#5B6470]/60 shrink-0" />
+                  <span className="truncate">Message</span>
+                </button>
+              )}
 
-                      <div className="relative">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setOpenVisitMenuId(isVisitMenuOpen ? null : visit.id);
-                          }}
-                          className="min-h-[44px] min-w-[44px] p-2 text-[#5B6470] hover:text-[#14213D] hover:bg-slate-100 rounded-[12px] flex items-center justify-center transition-colors"
-                          aria-label="Visit options"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
+              {/* Add Visit Action */}
+              <PrimaryButton
+                onClick={() => setIsAddingVisit(true)}
+                icon={<Plus className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5] shrink-0" />}
+                className="!px-1.5 sm:!px-3 !h-[52px] !min-h-[44px] !text-xs sm:!text-sm md:!text-base"
+              >
+                <span className="truncate">Add visit</span>
+              </PrimaryButton>
 
-                        {isVisitMenuOpen && (
-                          <>
-                            <div
-                              className="fixed inset-0 z-40"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setOpenVisitMenuId(null);
-                              }}
-                            />
-                            <div
-                              className="absolute right-0 top-full mt-1 z-50 w-32 bg-white rounded-[14px] border border-[#E7E3DA] shadow-e3 py-1 overflow-hidden animate-in fade-in duration-100"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOpenVisitMenuId(null);
-                                  setEditingVisit(visit);
-                                }}
-                                className="w-full min-h-[44px] px-3.5 py-2 text-left text-sm font-semibold text-[#14213D] hover:bg-slate-50 flex items-center gap-2 transition-colors"
-                              >
-                                <Edit2 className="w-3.5 h-3.5 text-[#5B6470]" />
-                                <span>Edit</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOpenVisitMenuId(null);
-                                  setVisitToDelete(visit);
-                                }}
-                                className="w-full min-h-[44px] px-3.5 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                                <span>Delete</span>
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="text-base text-[#14213D] leading-relaxed pl-6 whitespace-pre-wrap">
-                      {visit.remarks ? (
-                        visit.remarks
-                      ) : (
-                        <span className="italic text-[#5B6470] text-sm">No remarks entered.</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* 4. Location Section */}
-        <div className="bg-white rounded-[16px] border border-[#E7E3DA] shadow-e1 p-5 space-y-3">
-          <h2 className="text-base font-bold text-[#14213D] flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-[#0F766E]" />
-            Location
-          </h2>
-
-          {person.latitude !== null && person.longitude !== null ? (
-            <div className="space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-white rounded-[14px] border border-[#E7E3DA]">
-                <div className="space-y-0.5 min-w-0">
-                  <div className="text-base font-bold text-[#14213D]">Saved location</div>
-                  <p className="text-xs text-[#5B6470] font-mono">
-                    {person.latitude.toFixed(6)}, {person.longitude.toFixed(6)}
-                  </p>
-                </div>
+              {/* Maps Action */}
+              {person.latitude !== null && person.longitude !== null ? (
                 <a
                   href={getMapsUrl(person.latitude, person.longitude)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="min-h-[44px] px-4 py-2 text-sm font-semibold text-[#0F766E] bg-white hover:bg-slate-50 border border-[#E7E3DA] rounded-[14px] flex items-center justify-center gap-1.5 transition-colors shrink-0 shadow-xs"
+                  className="h-[52px] min-h-[44px] px-1.5 sm:px-3 bg-[#F3F1EC] hover:bg-slate-100 border border-[#E7E3DA] rounded-[14px] flex items-center justify-center gap-1.5 sm:gap-2 text-[#14213D] font-semibold text-xs sm:text-sm md:text-base transition-colors"
                 >
-                  <ExternalLink className="w-4 h-4" />
-                  <span>Open in Maps</span>
+                  <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-[#0F766E] shrink-0" />
+                  <span className="truncate">Maps</span>
                 </a>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleUpdateLocation}
+                  disabled={isLocating}
+                  className="h-[52px] min-h-[44px] px-1.5 sm:px-3 bg-[#F3F1EC]/60 hover:bg-[#F3F1EC] border border-[#E7E3DA] rounded-[14px] flex items-center justify-center gap-1.5 sm:gap-2 text-[#5B6470] font-semibold text-xs sm:text-sm md:text-base transition-colors disabled:opacity-50"
+                >
+                  <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-[#5B6470]/60 shrink-0" />
+                  <span className="truncate">Maps</span>
+                </button>
+              )}
+            </div>
+
+            {/* 4. Location Section */}
+            <div className="bg-white rounded-[16px] border border-[#E7E3DA] shadow-e1 p-5 space-y-3">
+              <h2 className="text-base font-bold text-[#14213D] flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-[#0F766E]" />
+                Location
+              </h2>
+
+              {person.latitude !== null && person.longitude !== null ? (
+                <div className="space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-white rounded-[14px] border border-[#E7E3DA]">
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="text-base font-bold text-[#14213D]">Saved location</div>
+                      <p className="text-xs text-[#5B6470] font-mono">
+                        {person.latitude.toFixed(6)}, {person.longitude.toFixed(6)}
+                      </p>
+                    </div>
+                    <a
+                      href={getMapsUrl(person.latitude, person.longitude)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="min-h-[44px] px-4 py-2 text-sm font-semibold text-[#0F766E] bg-white hover:bg-slate-50 border border-[#E7E3DA] rounded-[14px] flex items-center justify-center gap-1.5 transition-colors shrink-0 shadow-xs"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      <span>Open in Maps</span>
+                    </a>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleUpdateLocation}
+                    disabled={isLocating}
+                    className="w-full h-[52px] min-h-[52px] px-5 text-base font-semibold text-[#14213D] bg-white hover:bg-slate-50 border border-[#E7E3DA] rounded-[16px] flex items-center justify-center gap-2 transition-colors disabled:opacity-50 shadow-xs"
+                  >
+                    <Navigation className={`w-4 h-4 ${isLocating ? 'animate-spin text-[#0F766E]' : 'text-[#0F766E]'}`} />
+                    <span>{isLocating ? 'Determining GPS...' : 'Update Location'}</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="p-4 bg-white rounded-[14px] border border-[#E7E3DA]">
+                    <div className="text-base font-bold text-[#14213D]">No location saved</div>
+                    <p className="text-sm text-[#5B6470] mt-0.5">Capture GPS coordinates for field navigation.</p>
+                  </div>
+
+                  <PrimaryButton
+                    onClick={handleUpdateLocation}
+                    disabled={isLocating}
+                    className="w-full"
+                    icon={<Navigation className={`w-4 h-4 ${isLocating ? 'animate-spin' : ''}`} />}
+                  >
+                    {isLocating ? 'Determining GPS...' : 'Get Current Location'}
+                  </PrimaryButton>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Column on Desktop: Visit History */}
+          <div className="lg:col-span-7 xl:col-span-7 space-y-4">
+            {/* 3. Visit History Section */}
+            <div className="bg-white rounded-[16px] border border-[#E7E3DA] shadow-e1 p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-[#14213D] flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-[#0F766E]" />
+                    Visit history
+                  </h2>
+                  <span className="text-sm font-mono font-medium text-[#5B6470]">
+                    ({visits.length})
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsAddingVisit(true)}
+                  className="min-h-[44px] px-3.5 py-2 text-sm font-semibold text-[#0F766E] hover:bg-[#0F766E]/10 rounded-[12px] flex items-center gap-1.5 transition-colors"
+                >
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                  <span>Add visit</span>
+                </button>
               </div>
 
-              <button
-                type="button"
-                onClick={handleUpdateLocation}
-                disabled={isLocating}
-                className="w-full h-[52px] min-h-[52px] px-5 text-base font-semibold text-[#14213D] bg-white hover:bg-slate-50 border border-[#E7E3DA] rounded-[16px] flex items-center justify-center gap-2 transition-colors disabled:opacity-50 shadow-xs"
-              >
-                <Navigation className={`w-4 h-4 ${isLocating ? 'animate-spin text-[#0F766E]' : 'text-[#0F766E]'}`} />
-                <span>{isLocating ? 'Determining GPS...' : 'Update Location'}</span>
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="p-4 bg-white rounded-[14px] border border-[#E7E3DA]">
-                <div className="text-base font-bold text-[#14213D]">No location saved</div>
-                <p className="text-sm text-[#5B6470] mt-0.5">Capture GPS coordinates for field navigation.</p>
-              </div>
+              {visits.length === 0 ? (
+                <div className="py-8 text-center text-[#5B6470]">
+                  <Calendar className="w-8 h-8 mx-auto text-[#5B6470]/40 stroke-[1.5] mb-2" />
+                  <p className="text-base font-semibold text-[#14213D]">No visits recorded yet</p>
+                  <p className="text-sm text-[#5B6470] mt-0.5">
+                    Record your first visit after speaking with this contact.
+                  </p>
+                  <div className="mt-4">
+                    <PrimaryButton
+                      onClick={() => setIsAddingVisit(true)}
+                      icon={<Plus className="w-5 h-5 stroke-[2.5]" />}
+                    >
+                      Record first visit
+                    </PrimaryButton>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3 divide-y divide-[#E7E3DA]">
+                  {visits.map((visit) => {
+                    const visitDateStr = new Date(visit.visitedAt).toLocaleDateString(undefined, {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    });
+                    const isVisitMenuOpen = openVisitMenuId === visit.id;
 
-              <PrimaryButton
-                onClick={handleUpdateLocation}
-                disabled={isLocating}
-                className="w-full"
-                icon={<Navigation className={`w-4 h-4 ${isLocating ? 'animate-spin' : ''}`} />}
-              >
-                {isLocating ? 'Determining GPS...' : 'Get Current Location'}
-              </PrimaryButton>
+                    return (
+                      <div key={visit.id} className="pt-3.5 first:pt-0 group">
+                        <div className="flex items-center justify-between text-sm text-[#5B6470] mb-1.5">
+                          <div className="flex items-center gap-2 font-bold text-[#14213D]">
+                            <Calendar className="w-4 h-4 text-[#0F766E]" />
+                            <span>{visitDateStr}</span>
+                          </div>
+
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenVisitMenuId(isVisitMenuOpen ? null : visit.id);
+                              }}
+                              className="min-h-[44px] min-w-[44px] p-2 text-[#5B6470] hover:text-[#14213D] hover:bg-slate-100 rounded-[12px] flex items-center justify-center transition-colors"
+                              aria-label="Visit options"
+                            >
+                              <MoreVertical className="w-5 h-5" />
+                            </button>
+
+                            {isVisitMenuOpen && (
+                              <>
+                                <div
+                                  className="fixed inset-0 z-40"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenVisitMenuId(null);
+                                  }}
+                                />
+                                <div
+                                  className="absolute right-0 top-full mt-1 z-50 w-32 bg-white rounded-[14px] border border-[#E7E3DA] shadow-e3 py-1 overflow-hidden animate-in fade-in duration-100"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenVisitMenuId(null);
+                                      setEditingVisit(visit);
+                                    }}
+                                    className="w-full min-h-[44px] px-3.5 py-2 text-left text-sm font-semibold text-[#14213D] hover:bg-slate-50 flex items-center gap-2 transition-colors"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5 text-[#5B6470]" />
+                                    <span>Edit</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenVisitMenuId(null);
+                                      setVisitToDelete(visit);
+                                    }}
+                                    className="w-full min-h-[44px] px-3.5 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                                    <span>Delete</span>
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="text-base text-[#14213D] leading-relaxed pl-6 whitespace-pre-wrap">
+                          {visit.remarks ? (
+                            visit.remarks
+                          ) : (
+                            <span className="italic text-[#5B6470] text-sm">No remarks entered.</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
 

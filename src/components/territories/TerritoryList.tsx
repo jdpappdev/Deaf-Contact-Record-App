@@ -122,24 +122,41 @@ export const TerritoryList: React.FC = () => {
   };
 
   return (
-    <div className="pb-28">
+    <div className="pb-28 md:pb-12">
       {/* Unified Compact Header */}
-      <header className="sticky top-0 z-30 bg-white border-b border-[#E7E3DA] px-4 py-3 shadow-e2">
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3 min-h-[44px]">
-          <div className="min-w-0">
-            <p className="font-['Plus_Jakarta_Sans',sans-serif] text-[11px] sm:text-xs font-semibold tracking-[0.14em] uppercase text-[#14213D] leading-tight select-none">
-              DEAF CONTACT RECORD
-            </p>
-            <p className="text-sm text-[#5B6470] font-normal mt-0.5">
-              <span className="font-mono tabular-nums font-semibold text-[#14213D]">{territories.length}</span>{' '}
-              {territories.length === 1 ? 'territory' : 'territories'}
-            </p>
+      <header className="sticky top-0 md:top-[58px] lg:top-0 z-30 bg-white border-b border-[#E7E3DA] px-4 sm:px-6 py-3 shadow-e2">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3 min-h-[44px]">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <img
+              src="/icon-192.png"
+              alt="Deaf Contact Record"
+              className="w-8 h-8 rounded-[10px] object-cover shadow-2xs ring-1 ring-black/5 shrink-0"
+            />
+            <div className="min-w-0">
+              <p className="font-['Plus_Jakarta_Sans',sans-serif] text-[11px] sm:text-xs font-semibold tracking-[0.14em] uppercase text-[#14213D] leading-tight select-none">
+                DEAF CONTACT RECORD
+              </p>
+              <p className="text-sm text-[#5B6470] font-normal mt-0.5">
+                <span className="font-mono tabular-nums font-semibold text-[#14213D]">{territories.length}</span>{' '}
+                {territories.length === 1 ? 'territory' : 'territories'}
+              </p>
+            </div>
           </div>
+
+          {/* Desktop/Tablet Header Action */}
+          <button
+            type="button"
+            onClick={() => setIsAddModalOpen(true)}
+            className="hidden sm:inline-flex h-11 px-4 text-sm font-semibold text-white bg-[#0F766E] hover:bg-[#0D655E] active:scale-[0.98] rounded-[14px] items-center gap-2 shadow-xs transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>New Territory</span>
+          </button>
         </div>
       </header>
 
       {/* Main List */}
-      <main className="max-w-4xl mx-auto px-4 pt-4">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-4 sm:pt-6">
         {territories.length === 0 ? (
           <div className="py-16 text-center max-w-sm mx-auto">
             <div className="w-16 h-16 bg-white border border-[#E7E3DA] text-[#0F766E] rounded-[20px] shadow-e1 flex items-center justify-center mx-auto mb-4">
@@ -159,7 +176,7 @@ export const TerritoryList: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
             {territories.map((terr) => {
               const memberCount = countByTerritory.get(terr.id) || 0;
               const isMenuOpen = openMenuTerritoryId === terr.id;

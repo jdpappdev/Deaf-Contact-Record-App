@@ -46,15 +46,15 @@ export const RecordCard: React.FC<RecordCardProps> = ({
             {person.name}
           </h3>
 
-          <div className="flex items-center gap-2 mt-0.5 text-sm text-[#5B6470] font-normal">
-            <span className="truncate max-w-[140px] flex items-center gap-1.5">
+          <div className="flex items-center gap-2 mt-0.5 text-sm text-[#5B6470] font-normal min-w-0">
+            <span className="truncate max-w-[110px] sm:max-w-[160px] md:max-w-[180px] xl:max-w-[140px] 2xl:max-w-none flex items-center gap-1.5 shrink-0">
               <MapPin className="w-3.5 h-3.5 text-[#5B6470]/70 shrink-0" />
               {territory ? territory.name : 'Unassigned'}
             </span>
 
-            <span aria-hidden="true" className="text-[#E7E3DA]">·</span>
+            <span aria-hidden="true" className="text-[#E7E3DA] shrink-0">·</span>
 
-            <span className="truncate flex items-center gap-1.5">
+            <span className="truncate flex items-center gap-1.5 min-w-0">
               <Calendar className="w-3.5 h-3.5 text-[#5B6470]/70 shrink-0" />
               {formattedVisitDate ? formattedVisitDate : 'No visits'}
             </span>

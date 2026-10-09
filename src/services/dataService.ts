@@ -483,30 +483,35 @@ export const backupService = {
       getAllFromStore<PhotoAsset>(STORES.PHOTOS),
     ]);
 
-    // Serialize Blobs to base64 dataUrl string solely for JSON portability
-    const photos: PhotoAsset[] = await Promise.all(
-      rawPhotos.map(async (p) => {
-        if (p.blob) {
-          try {
-            const dataUrl = await blobToDataUrl(p.blob);
-            return {
-              id: p.id,
-              dataUrl,
-              mimeType: p.mimeType,
-              createdAt: p.createdAt,
-            };
-          } catch (err) {
-            console.warn(`Failed to serialize photo asset "${p.id}" to dataUrl:`, err);
-            return {
-              id: p.id,
-              mimeType: p.mimeType,
-              createdAt: p.createdAt,
-            };
-          }
+    // Serialize Blobs to base64 dataUrl string solely for JSON portability with fault-tolerant asset reporting
+    const failedPhotoIds: string[] = [];
+    const photos: PhotoAsset[] = [];
+    for (const p of rawPhotos) {
+      if (p.blob) {
+        try {
+          const dataUrl = await blobToDataUrl(p.blob);
+          photos.push({
+            id: p.id,
+            dataUrl,
+            mimeType: p.mimeType,
+            createdAt: p.createdAt,
+          });
+        } catch (err) {
+          failedPhotoIds.push(p.id);
+          console.warn(`[Fault-Tolerant Export] Failed to serialize photo asset "${p.id}" to dataUrl:`, err);
+          photos.push({
+            id: p.id,
+            mimeType: p.mimeType,
+            createdAt: p.createdAt,
+          });
         }
-        return p;
-      })
-    );
+      } else {
+        photos.push(p);
+      }
+    }
+    if (failedPhotoIds.length > 0) {
+      console.warn(`[Fault-Tolerant Export] Completed with warnings: ${failedPhotoIds.length} photo asset(s) failed serialization and were exported as metadata-only placeholders:`, failedPhotoIds);
+    }
 
     return {
       version: 1,

@@ -28,7 +28,7 @@ export const BottomNavigation: React.FC = () => {
   return (
     <nav
       aria-label="Main Navigation"
-      className="fixed bottom-3 left-3 right-3 sm:left-auto sm:right-auto sm:w-[480px] sm:left-1/2 sm:-translate-x-1/2 z-40 pb-safe md:hidden"
+      className="fixed bottom-3 left-3 right-3 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto sm:w-[460px] z-40 pb-safe md:hidden"
     >
       <div className="relative bg-white/95 backdrop-blur-md rounded-[24px] border border-[#E7E3DA] shadow-e3 px-2 py-1.5 h-16">
         {/* Sliding teal pill behind active icon/tab */}

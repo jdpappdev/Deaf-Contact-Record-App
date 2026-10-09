@@ -229,11 +229,11 @@ export const RecordFormModal: React.FC<RecordFormModalProps> = ({
         className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#14213D]/40 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto"
       >
         <div
-          className="w-full max-w-lg bg-white rounded-[16px] border border-[#E7E3DA] shadow-e3 overflow-hidden my-auto"
+          className="w-full max-w-lg max-h-[92vh] flex flex-col bg-white rounded-[16px] border border-[#E7E3DA] shadow-e3 overflow-hidden my-auto"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-[#E7E3DA]">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[#E7E3DA] shrink-0">
             <h2 className="text-base font-bold text-[#14213D]">
               {initialPerson ? 'Edit Contact' : 'Add Contact'}
             </h2>
@@ -247,7 +247,7 @@ export const RecordFormModal: React.FC<RecordFormModalProps> = ({
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+          <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
             {formError && (
               <div className="flex items-start gap-2 p-3 text-sm text-red-600 bg-white rounded-[14px] border border-red-200">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />

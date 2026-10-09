@@ -99,49 +99,122 @@ export const RecordList: React.FC = () => {
   const isFilterActive = selectedTerritoryFilter !== 'all' || selectedSortMethod !== 'name-asc';
 
   return (
-    <div className="pb-28">
+    <div className="pb-28 md:pb-12">
       {/* Top Header */}
-      <header className="sticky top-0 z-20 bg-white border-b border-[#E7E3DA] px-4 py-3 shadow-e2">
-        <div className="max-w-4xl mx-auto">
-          {/* Main Bar: Brand Wordmark (Left), Secondary Count (below brand), Search Trigger (Right) */}
+      <header className="sticky top-0 md:top-[58px] lg:top-0 z-20 bg-white border-b border-[#E7E3DA] px-4 sm:px-6 py-3 shadow-e2">
+        <div className="max-w-6xl mx-auto">
+          {/* Main Bar */}
           <div className="flex items-center justify-between gap-3 min-h-[44px]">
-            <div className="min-w-0">
-              <p className="font-['Plus_Jakarta_Sans',sans-serif] text-[11px] sm:text-xs font-semibold tracking-[0.14em] uppercase text-[#14213D] leading-tight select-none">
-                DEAF CONTACT RECORD
-              </p>
-              <p className="text-sm text-[#5B6470] font-normal mt-0.5">
-                <span className="font-mono tabular-nums font-semibold text-[#14213D]">{people.length}</span>{' '}
-                {people.length === 1 ? 'person' : 'people'}
-              </p>
+            {/* Brand / Title & Count */}
+            <div className="flex items-center gap-2.5 min-w-0">
+              <img
+                src="/icon-192.png"
+                alt="Deaf Contact Record"
+                className="w-8 h-8 rounded-[10px] object-cover shadow-2xs ring-1 ring-black/5 shrink-0"
+              />
+              <div className="min-w-0">
+                <p className="font-['Plus_Jakarta_Sans',sans-serif] text-[11px] sm:text-xs font-semibold tracking-[0.14em] uppercase text-[#14213D] leading-tight select-none">
+                  DEAF CONTACT RECORD
+                </p>
+                <p className="text-sm text-[#5B6470] font-normal mt-0.5">
+                  <span className="font-mono tabular-nums font-semibold text-[#14213D]">{people.length}</span>{' '}
+                  {people.length === 1 ? 'person' : 'people'}
+                </p>
+              </div>
             </div>
 
-            {/* Compact Search Trigger Button */}
-            <button
-              type="button"
-              onClick={() => {
-                if (!isSearchOpen) {
-                  setIsSearchOpen(true);
-                  setTimeout(() => searchInputRef.current?.focus(), 50);
-                } else {
-                  setIsSearchOpen(false);
-                  setSearchQuery('');
-                }
-              }}
-              className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-[14px] flex items-center justify-center transition-all duration-200 border select-none ${
-                isSearchOpen || searchQuery
-                  ? 'bg-[#0F766E]/10 text-[#0F766E] border-[#0F766E]/30'
-                  : 'text-[#5B6470] hover:text-[#14213D] hover:bg-slate-100 border-transparent active:bg-slate-200'
-              }`}
-              aria-label={isSearchOpen ? 'Close search' : 'Search contacts'}
-              title={isSearchOpen ? 'Close search' : 'Search contacts'}
-            >
-              <Search className="w-5 h-5 stroke-[2]" />
-            </button>
+            {/* Desktop / Tablet Persistent Search, Filter & Action (Visible sm: and up) */}
+            <div className="hidden sm:flex items-center gap-2.5 flex-1 max-w-lg justify-end">
+              <div className="relative flex-1 max-w-xs">
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5B6470]" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search contacts..."
+                  className="w-full h-11 pl-9 pr-9 text-sm text-[#14213D] bg-[#F3F1EC]/60 hover:bg-[#F3F1EC] focus:bg-white border border-[#E7E3DA] rounded-[14px] focus:outline-none focus:ring-2 focus:ring-[#0F766E]/20 focus:border-[#0F766E] transition-colors"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-[#5B6470] hover:text-[#14213D]"
+                    aria-label="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsFilterModalOpen(true)}
+                className={`h-11 min-h-[44px] px-3.5 inline-flex items-center gap-2 rounded-[14px] border text-sm font-semibold transition-all select-none cursor-pointer shrink-0 ${
+                  isFilterActive
+                    ? 'bg-[#0F766E]/10 border-[#0F766E]/30 text-[#0F766E]'
+                    : 'bg-white border-[#E7E3DA] text-[#14213D] hover:bg-slate-50 shadow-xs'
+                }`}
+              >
+                <Filter className={`w-4 h-4 ${isFilterActive ? 'text-[#0F766E]' : 'text-[#5B6470]'}`} />
+                <span>Filter</span>
+                {isFilterActive && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#0F766E]" />
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(true)}
+                className="inline-flex h-11 px-4 text-sm font-semibold text-white bg-[#0F766E] hover:bg-[#0D655E] active:scale-[0.98] rounded-[14px] items-center gap-1.5 shadow-xs transition-all cursor-pointer shrink-0"
+              >
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                <span className="hidden md:inline">New Contact</span>
+                <span className="md:hidden">Add</span>
+              </button>
+            </div>
+
+            {/* Mobile Actions: Compact Search Trigger + Filter (sm:hidden) */}
+            <div className="flex sm:hidden items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setIsFilterModalOpen(true)}
+                className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-[14px] flex items-center justify-center transition-all duration-200 border select-none ${
+                  isFilterActive
+                    ? 'bg-[#0F766E]/10 text-[#0F766E] border-[#0F766E]/30'
+                    : 'text-[#5B6470] hover:text-[#14213D] hover:bg-slate-100 border-transparent'
+                }`}
+                aria-label="Filter contacts"
+              >
+                <Filter className="w-5 h-5 stroke-[2]" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isSearchOpen) {
+                    setIsSearchOpen(true);
+                    setTimeout(() => searchInputRef.current?.focus(), 50);
+                  } else {
+                    setIsSearchOpen(false);
+                    setSearchQuery('');
+                  }
+                }}
+                className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-[14px] flex items-center justify-center transition-all duration-200 border select-none ${
+                  isSearchOpen || searchQuery
+                    ? 'bg-[#0F766E]/10 text-[#0F766E] border-[#0F766E]/30'
+                    : 'text-[#5B6470] hover:text-[#14213D] hover:bg-slate-100 border-transparent'
+                }`}
+                aria-label={isSearchOpen ? 'Close search' : 'Search contacts'}
+                title={isSearchOpen ? 'Close search' : 'Search contacts'}
+              >
+                <Search className="w-5 h-5 stroke-[2]" />
+              </button>
+            </div>
           </div>
 
-          {/* Expanded Search Field (shown when opened) */}
+          {/* Mobile Expanded Search Field (shown when opened on small screens) */}
           {isSearchOpen && (
-            <div className="mt-2.5 pt-2.5 border-t border-[#E7E3DA] flex items-center gap-2 animate-in fade-in duration-150">
+            <div className="sm:hidden mt-2.5 pt-2.5 border-t border-[#E7E3DA] flex items-center gap-2 animate-in fade-in duration-150">
               <div className="relative flex-1">
                 <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5B6470]" />
                 <input
@@ -182,32 +255,23 @@ export const RecordList: React.FC = () => {
       </header>
 
       {/* Main Content Area */}
-      <main className="max-w-4xl mx-auto px-4 pt-4">
-        {/* Compact Filter Button below header */}
-        <div className="mb-3.5 flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setIsFilterModalOpen(true)}
-            className={`h-11 min-h-[44px] px-4 inline-flex items-center gap-2 rounded-[14px] border text-sm font-medium transition-all select-none ${
-              isFilterActive
-                ? 'bg-[#0F766E]/10 border-[#0F766E]/30 text-[#0F766E] font-semibold'
-                : 'bg-white border-[#E7E3DA] text-[#14213D] hover:bg-slate-50 active:bg-slate-100 shadow-e1'
-            }`}
-          >
-            <Filter className={`w-4 h-4 ${isFilterActive ? 'text-[#0F766E]' : 'text-[#5B6470]'}`} />
-            <span>Filter</span>
-            {isFilterActive && (
-              <span className="w-1.5 h-1.5 rounded-full bg-[#0F766E]" />
-            )}
-          </button>
-
-          {/* Active territory filter indicator if filtered */}
-          {selectedTerritoryFilter !== 'all' && (
-            <span className="text-xs text-[#5B6470] truncate max-w-[200px]">
-              Territory: <strong className="font-semibold text-[#14213D]">{selectedTerritoryFilter === 'unassigned' ? 'Unassigned' : territoryMap.get(selectedTerritoryFilter)?.name || 'Filtered'}</strong>
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-4 sm:pt-6">
+        {/* Active territory filter indicator if filtered */}
+        {selectedTerritoryFilter !== 'all' && (
+          <div className="mb-3.5 flex items-center justify-between bg-white px-3.5 py-2 rounded-[14px] border border-[#E7E3DA] text-xs sm:text-sm text-[#5B6470]">
+            <span>
+              Filtered by Territory: <strong className="font-semibold text-[#14213D]">{selectedTerritoryFilter === 'unassigned' ? 'Unassigned' : territoryMap.get(selectedTerritoryFilter)?.name || 'Filtered'}</strong>
             </span>
-          )}
-        </div>
+            <button
+              type="button"
+              onClick={() => setSelectedTerritoryFilter('all')}
+              className="text-[#0F766E] font-semibold hover:underline"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+
         {people.length === 0 ? (
           /* Empty state when no people in DB */
           <div className="py-16 text-center max-w-sm mx-auto">
@@ -248,8 +312,8 @@ export const RecordList: React.FC = () => {
             </button>
           </div>
         ) : (
-          /* Contact list: each contact is a separate raised row (e1) with 8px gaps */
-          <div className="flex flex-col gap-2">
+          /* Contact list: responsive 1-col on mobile, 2-col on tablet/laptop, 3-col on desktop */
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
             {filteredPeople.map((person) => (
               <RecordCard
                 key={person.id}

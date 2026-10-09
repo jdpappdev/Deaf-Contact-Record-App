@@ -261,16 +261,23 @@ export const ContactMapView: React.FC = () => {
   return (
     <div className="relative min-h-[calc(100vh-4rem)] md:min-h-[calc(100vh-4.5rem)] flex flex-col pb-28 md:pb-8">
       {/* Unified Compact Header */}
-      <header className="z-20 bg-white border-b border-[#E7E3DA] px-4 py-3 shrink-0 shadow-e2">
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3 min-h-[44px]">
-          <div className="min-w-0">
-            <p className="font-['Plus_Jakarta_Sans',sans-serif] text-[11px] sm:text-xs font-semibold tracking-[0.14em] uppercase text-[#14213D] leading-tight select-none">
-              DEAF CONTACT RECORD
-            </p>
-            <p className="text-sm text-[#5B6470] font-normal mt-0.5">
-              <span className="font-mono tabular-nums font-semibold text-[#14213D]">{peopleWithLocations.length}</span>{' '}
-              {peopleWithLocations.length === 1 ? 'person with location' : 'people with locations'}
-            </p>
+      <header className="sticky top-0 md:top-[58px] lg:top-0 z-20 bg-white border-b border-[#E7E3DA] px-4 sm:px-6 py-3 shrink-0 shadow-e2">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3 min-h-[44px]">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <img
+              src="/icon-192.png"
+              alt="Deaf Contact Record"
+              className="w-8 h-8 rounded-[10px] object-cover shadow-2xs ring-1 ring-black/5 shrink-0"
+            />
+            <div className="min-w-0">
+              <p className="font-['Plus_Jakarta_Sans',sans-serif] text-[11px] sm:text-xs font-semibold tracking-[0.14em] uppercase text-[#14213D] leading-tight select-none">
+                DEAF CONTACT RECORD
+              </p>
+              <p className="text-sm text-[#5B6470] font-normal mt-0.5">
+                <span className="font-mono tabular-nums font-semibold text-[#14213D]">{peopleWithLocations.length}</span>{' '}
+                {peopleWithLocations.length === 1 ? 'person with location' : 'people with locations'}
+              </p>
+            </div>
           </div>
 
           <button
@@ -289,8 +296,8 @@ export const ContactMapView: React.FC = () => {
       </header>
 
       {/* 2. Filter Chips slider: All Territories and individual territories (Unassigned removed per requirements) */}
-      <div className="z-20 bg-white/95 backdrop-blur-xs border-b border-[#E7E3DA] px-4 py-2 shrink-0">
-        <div className="max-w-4xl mx-auto flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 text-sm">
+      <div className="z-20 bg-white/95 backdrop-blur-xs border-b border-[#E7E3DA] px-4 sm:px-6 py-2 shrink-0">
+        <div className="max-w-6xl mx-auto flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 text-sm">
           <span className="text-[#5B6470]/60 flex items-center gap-1 text-sm font-medium shrink-0 mr-0.5">
             <Filter className="w-4 h-4" />
           </span>
@@ -326,8 +333,8 @@ export const ContactMapView: React.FC = () => {
       </div>
 
       {/* Dedicated Landscape Map Panel Container */}
-      <main className="flex-1 w-full max-w-4xl mx-auto px-3.5 sm:px-4 py-3 sm:py-4 flex flex-col justify-center items-center">
-        <div className="w-full relative bg-white rounded-[20px] sm:rounded-[24px] border border-[#E7E3DA] shadow-e2 overflow-hidden h-[54vh] min-h-[300px] max-h-[440px] md:h-[480px] md:max-h-[520px]">
+      <main className="flex-1 w-full max-w-6xl mx-auto px-3.5 sm:px-6 py-3 sm:py-5 flex flex-col justify-center items-center">
+        <div className="w-full relative bg-white rounded-[20px] sm:rounded-[24px] border border-[#E7E3DA] shadow-e2 overflow-hidden h-[58vh] min-h-[350px] md:h-[62vh] md:min-h-[480px] lg:h-[calc(100vh-14rem)] lg:min-h-[520px] lg:max-h-[760px]">
           {/* Permanent Map DOM Container prevents unexpected unmount during transitions */}
           <div ref={mapContainerRef} className="w-full h-full z-0" />
 
@@ -427,7 +434,7 @@ export const ContactMapView: React.FC = () => {
 
               {/* Floating e3 Card for Selected Marker inside Map Panel */}
               {selectedContact && (
-                <div className="absolute bottom-3 left-3 right-3 sm:left-4 sm:right-4 z-30 max-w-sm mx-auto bg-white rounded-[16px] border border-[#E7E3DA] p-3.5 sm:p-4 shadow-e3 animate-in fade-in slide-in-from-bottom-2 duration-150">
+                <div className="absolute bottom-3 left-3 right-3 sm:bottom-4 sm:left-4 sm:right-auto sm:w-[380px] z-30 max-w-sm mx-auto sm:mx-0 bg-white rounded-[16px] border border-[#E7E3DA] p-3.5 sm:p-4 shadow-e3 animate-in fade-in slide-in-from-bottom-2 duration-150">
                   <div className="flex items-center gap-3">
                     <Avatar photoRef={selectedContact.photoRef} name={selectedContact.name} size="md" />
 

@@ -5,7 +5,7 @@ export const PRIMARY_BUTTON_CLASSES =
   'h-[52px] min-h-[52px] px-6 text-base font-semibold text-white bg-[#0F766E] hover:bg-[#0D655E] active:scale-[0.98] rounded-[16px] inline-flex items-center justify-center gap-2 shadow-e2 transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed select-none';
 
 export const PRIMARY_FAB_CLASSES =
-  'fixed bottom-24 right-4 sm:right-6 z-30 w-14 h-14 min-w-[56px] min-h-[56px] rounded-full bg-[#0F766E] hover:bg-[#0D655E] active:scale-[0.92] text-white flex items-center justify-center shadow-e3 transition-all duration-180 ease-out focus:outline-none focus:ring-4 focus:ring-[#0F766E]/30 select-none cursor-pointer';
+  'fixed bottom-24 md:bottom-8 right-4 md:right-8 lg:bottom-8 lg:right-10 z-30 w-14 h-14 min-w-[56px] min-h-[56px] rounded-full bg-[#0F766E] hover:bg-[#0D655E] active:scale-[0.92] text-white flex items-center justify-center shadow-e3 transition-all duration-180 ease-out focus:outline-none focus:ring-4 focus:ring-[#0F766E]/30 select-none cursor-pointer';
 
 export interface PrimaryButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
