@@ -1,0 +1,10 @@
+{
+  "name": "Deaf Contact Record App",
+  "description": "A fast, local-first field contact and visit management application for recording deaf contacts, territories, locations, and visit history.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
