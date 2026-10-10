@@ -293,22 +293,90 @@ describe('Shared Workspace & Offline Outbox Test Suite', () => {
     assert.equal(legacy.isLocalOnly, true, 'Legacy record remains intact');
   });
 
-  it('7. Authorization Gate: Guest or unapproved user cannot trigger cloud writes', () => {
+  it('7. Authorization Gate: Signed-in user can trigger cloud writes; signed-out guest is blocked', () => {
     const guestUser = null;
-    const pendingMember = { uid: 'user_pending', isApproved: false };
-    const approvedMember = { uid: 'user_approved', isApproved: true };
+    const signedInUser = { uid: 'auth_user_123' };
 
-    function canWriteSharedData(user: { uid: string; isApproved: boolean } | null): boolean {
-      if (!user) return false;
-      return user.isApproved;
+    function canWriteSharedData(user: { uid: string } | null): boolean {
+      return user !== null;
     }
 
-    assert.equal(canWriteSharedData(guestUser), false, 'Guest cannot write');
-    assert.equal(canWriteSharedData(pendingMember), false, 'Pending member cannot write');
-    assert.equal(canWriteSharedData(approvedMember), true, 'Approved member can write');
+    assert.equal(canWriteSharedData(guestUser), false, 'Guest cannot write shared data');
+    assert.equal(canWriteSharedData(signedInUser), true, 'Signed-in account is authorized to write');
   });
 
-  it('8. Safe Reconciliation: Promotes local records into /workspaces/default and queues them without duplicates', () => {
+  it('8. Distinct Entity Paths: Contact, territory, and visit upload paths enqueue and process independently', async () => {
+    const queue = new MockOutboxStore();
+
+    // Enqueue contact
+    const contactOp = await queue.enqueue({
+      entityType: 'person',
+      entityId: 'p_1',
+      operationType: 'upsert',
+      payload: { name: 'Deaf Contact 1' },
+      workspaceId: 'default',
+    });
+
+    // Enqueue territory
+    const territoryOp = await queue.enqueue({
+      entityType: 'territory',
+      entityId: 't_1',
+      operationType: 'upsert',
+      payload: { name: 'Territory 1' },
+      workspaceId: 'default',
+    });
+
+    // Enqueue visit
+    const visitOp = await queue.enqueue({
+      entityType: 'visit',
+      entityId: 'v_1',
+      operationType: 'upsert',
+      payload: { personId: 'p_1', remarks: 'First visit' },
+      workspaceId: 'default',
+    });
+
+    assert.equal(contactOp.workspaceId, 'default');
+    assert.equal(territoryOp.workspaceId, 'default');
+    assert.equal(visitOp.workspaceId, 'default');
+
+    // Each operation can be marked processing and completed independently
+    await queue.markProcessing(contactOp.id);
+    await queue.markCompleted(contactOp.id);
+    assert.equal(queue.get(contactOp.id), undefined, 'Contact op completed and removed');
+
+    await queue.markProcessing(territoryOp.id);
+    await queue.markCompleted(territoryOp.id);
+    assert.equal(queue.get(territoryOp.id), undefined, 'Territory op completed and removed');
+
+    await queue.markProcessing(visitOp.id);
+    await queue.markCompleted(visitOp.id);
+    assert.equal(queue.get(visitOp.id), undefined, 'Visit op completed and removed');
+  });
+
+  it('9. Permission Error Surfacing & Outbox Preservation: Failed operations remain queued with error message', async () => {
+    const queue = new MockOutboxStore();
+
+    const visitOp = await queue.enqueue({
+      entityType: 'visit',
+      entityId: '73eac184-5d56-420a-8543-2cd5f054e4ab',
+      operationType: 'upsert',
+      payload: { remarks: 'Visit note' },
+    });
+
+    // Simulate failure due to permission error
+    await queue.markProcessing(visitOp.id);
+    const simulatedError = 'Missing or insufficient permissions.';
+    await queue.markFailed(visitOp.id, simulatedError);
+
+    // Verify error is captured and operation remains in outbox for retry
+    const stored = queue.get(visitOp.id);
+    assert.ok(stored, 'Operation MUST remain in outbox');
+    assert.equal(stored.errorMessage, simulatedError, 'Error message must be recorded');
+    assert.equal(stored.status, 'pending', 'Must remain in pending status for subsequent retry');
+    assert.equal(stored.retryCount, 1, 'Retry count incremented');
+  });
+
+  it('10. Safe Reconciliation: Promotes local records into /workspaces/default and queues them without duplicates', () => {
     const localPeople: Person[] = [
       {
         id: 'local_rec_1',
@@ -324,7 +392,7 @@ describe('Shared Workspace & Offline Outbox Test Suite', () => {
       },
     ];
 
-    const currentUserId = 'approved_member_123';
+    const currentUserId = 'auth_user_123';
     const workspaceId = 'default';
 
     // Reconcile
@@ -337,8 +405,31 @@ describe('Shared Workspace & Offline Outbox Test Suite', () => {
     }));
 
     assert.equal(reconciled[0].workspaceId, 'default');
-    assert.equal(reconciled[0].createdBy, 'approved_member_123');
+    assert.equal(reconciled[0].createdBy, 'auth_user_123');
     assert.equal(reconciled[0].isLocalOnly, false);
     assert.equal(reconciled[0].id, 'local_rec_1', 'Original ID preserved to prevent duplicate creation');
+  });
+
+  it('11. Full Saved Data Sync: Enqueues all saved records from local store to push to Firestore', async () => {
+    const queue = new MockOutboxStore();
+    const savedTerritories = [{ id: 'terr_1', name: 'Territory 1' }];
+    const savedPeople = [{ id: 'person_1', name: 'Person 1', territoryId: 'terr_1' }];
+    const savedVisits = [{ id: 'visit_1', personId: 'person_1', remarks: 'First visit' }];
+
+    for (const t of savedTerritories) {
+      await queue.enqueue({ entityType: 'territory', entityId: t.id, operationType: 'upsert', payload: t });
+    }
+    for (const p of savedPeople) {
+      await queue.enqueue({ entityType: 'person', entityId: p.id, operationType: 'upsert', payload: p });
+    }
+    for (const v of savedVisits) {
+      await queue.enqueue({ entityType: 'visit', entityId: v.id, operationType: 'upsert', payload: v });
+    }
+
+    const pending = await queue.getPending();
+    assert.equal(pending.length, 3, 'All 3 saved records enqueued');
+    assert.equal(pending[0].entityType, 'territory');
+    assert.equal(pending[1].entityType, 'person');
+    assert.equal(pending[2].entityType, 'visit');
   });
 });

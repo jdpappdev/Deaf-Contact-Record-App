@@ -228,40 +228,38 @@ describe('Real Firebase Emulator Rules Test Suite (Phase 3E)', () => {
   });
 
   // ==========================================
-  // 3. Authenticated Unapproved Users
+  // 3. Authenticated Users (Simplified Model)
   // ==========================================
-  it('11. Unapproved/pending user has read-only access to shared records', async () => {
-    const db = testEnv.authenticatedContext('user_pending').firestore();
+  it('11. Authenticated user has read access to shared records', async () => {
+    const db = testEnv.authenticatedContext('user_auth').firestore();
     await assertSucceeds(getDocs(collection(db, 'workspaces', 'default', 'people')));
     await assertSucceeds(getDocs(collection(db, 'workspaces', 'default', 'visits')));
     await assertSucceeds(getDocs(collection(db, 'workspaces', 'default', 'territories')));
   });
 
-  it('12. Unapproved/pending user CANNOT write shared records', async () => {
-    const db = testEnv.authenticatedContext('user_pending').firestore();
-    await assertFails(
-      setDoc(doc(db, 'workspaces', 'default', 'people', 'pending_person'), {
-        id: 'pending_person',
+  it('12. Authenticated user CAN create valid shared records directly after sign-in', async () => {
+    const db = testEnv.authenticatedContext('user_auth').firestore();
+    await assertSucceeds(
+      setDoc(doc(db, 'workspaces', 'default', 'people', 'auth_person'), {
+        id: 'auth_person',
         workspaceId: 'default',
-        createdBy: 'user_pending',
-        lastUpdatedBy: 'user_pending',
-        name: 'Pending Attempt',
+        createdBy: 'user_auth',
+        lastUpdatedBy: 'user_auth',
+        name: 'Auth Contact',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
     );
-    await assertFails(deleteDoc(doc(db, 'workspaces', 'default', 'visits', 'visit_seed')));
   });
 
-  it('13. Unapproved user CAN read their own membership doc, but CANNOT read others or list', async () => {
-    const db = testEnv.authenticatedContext('user_pending').firestore();
-    await assertSucceeds(getDoc(doc(db, 'workspaces', 'default', 'members', 'user_pending')));
-    await assertFails(getDoc(doc(db, 'workspaces', 'default', 'members', 'user_approved')));
-    await assertFails(getDocs(collection(db, 'workspaces', 'default', 'members')));
+  it('13. Authenticated user CAN read membership documents', async () => {
+    const db = testEnv.authenticatedContext('user_auth').firestore();
+    await assertSucceeds(getDoc(doc(db, 'workspaces', 'default', 'members', 'user_approved')));
+    await assertSucceeds(getDocs(collection(db, 'workspaces', 'default', 'members')));
   });
 
-  it('14. Unapproved user cannot self-approve or mutate membership documents', async () => {
-    const db = testEnv.authenticatedContext('user_pending').firestore();
+  it('14. Client-side mutation of membership documents remains denied', async () => {
+    const db = testEnv.authenticatedContext('user_auth').firestore();
     await assertFails(
       updateDoc(doc(db, 'workspaces', 'default', 'members', 'user_pending'), {
         status: 'approved',

@@ -17,6 +17,7 @@ import {
 } from '../services/firebase';
 import {
   processOutboxQueue,
+  syncAllSavedDataToFirestore,
   pullAndReconcileSharedData,
   subscribeToSharedWorkspace,
   reconcileLocalOnlyData,
@@ -295,21 +296,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setIsSyncing(true);
       setCloudSyncStatus('syncing');
 
-      const result = await processOutboxQueue(user, true);
+      // Sync all saved data (territories, contacts, visits) to Firestore
+      const result = await syncAllSavedDataToFirestore(user, 'default');
       setLastPushResult(result);
       await updatePendingCount();
+      await refreshData();
 
       if (result.success) {
         setCloudSyncStatus('synced');
         showToast(
           result.processedCount > 0
-            ? `Successfully pushed ${result.processedCount} queued change(s) to cloud`
-            : 'Outbox is clean. All changes are already synchronized',
+            ? `Successfully synced ${result.processedCount} saved record(s) to Firestore`
+            : 'All saved data is already synchronized with Firestore',
           'success'
         );
       } else {
         setCloudSyncStatus('error');
-        showToast(`Push completed with ${result.failedCount} error(s): ${result.errorMessage}`, 'error');
+        showToast(`Sync completed with ${result.failedCount} error(s): ${result.errorMessage}`, 'error');
       }
       return result;
     } catch (err: unknown) {

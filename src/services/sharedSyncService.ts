@@ -70,15 +70,27 @@ export async function pushPersonToFirestore(
   person: Person,
   userId: string
 ): Promise<void> {
+  // If territoryId is referenced, verify parent territory exists in Firestore
+  if (person.territoryId) {
+    const terrRef = doc(db, 'workspaces', workspaceId, 'territories', person.territoryId);
+    const terrSnap = await getDoc(terrRef);
+    if (!terrSnap.exists()) {
+      const localTerritory = await territoryService.getById(person.territoryId);
+      if (localTerritory) {
+        await pushTerritoryToFirestore(workspaceId, localTerritory, userId);
+      }
+    }
+  }
+
   const docRef = doc(db, 'workspaces', workspaceId, 'people', person.id);
   const docSnap = await getDoc(docRef);
 
   if (!docSnap.exists()) {
-    // Document creation
+    // Document creation: createdBy must match request.auth.uid
     await setDoc(docRef, {
       id: person.id,
       workspaceId,
-      createdBy: person.createdBy || userId,
+      createdBy: userId,
       lastUpdatedBy: userId,
       name: person.name.slice(0, 100),
       photoRef: person.photoRef || null,
@@ -120,7 +132,7 @@ export async function pushTerritoryToFirestore(
       id: territory.id,
       workspaceId,
       name: territory.name.slice(0, 100),
-      createdBy: territory.createdBy || userId,
+      createdBy: userId,
       lastUpdatedBy: userId,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -152,7 +164,7 @@ export async function pushVisitToFirestore(
     if (localPerson) {
       await pushPersonToFirestore(workspaceId, localPerson, userId);
     } else {
-      throw new Error(`Referenced person "${visit.personId}" does not exist in workspace.`);
+      throw new Error(`Referenced contact "${visit.personId}" does not exist in workspace.`);
     }
   }
 
@@ -166,7 +178,7 @@ export async function pushVisitToFirestore(
       personId: visit.personId,
       visitedAt: visit.visitedAt.slice(0, 50),
       remarks: (visit.remarks || '').slice(0, 2000),
-      createdBy: visit.createdBy || userId,
+      createdBy: userId,
       lastUpdatedBy: userId,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -199,7 +211,7 @@ export async function deleteVisitFromFirestore(
  */
 export async function processOutboxQueue(
   user: FirebaseUser | null,
-  isApproved: boolean,
+  _isApproved?: boolean,
   workspaceId = 'default'
 ): Promise<PushResult> {
   if (isSyncRunning) {
@@ -211,22 +223,13 @@ export async function processOutboxQueue(
     };
   }
 
-  // Safety gate: Guest and unapproved users must not write shared data
+  // Safety gate: Guest and unauthenticated users must not write shared data
   if (!user) {
     return {
       success: false,
       processedCount: 0,
       failedCount: 0,
-      errorMessage: 'Sign in with an authorized account to push changes to the cloud.',
-    };
-  }
-
-  if (!isApproved) {
-    return {
-      success: false,
-      processedCount: 0,
-      failedCount: 0,
-      errorMessage: 'Account is not an approved workspace member. Pushing shared records is blocked.',
+      errorMessage: 'Sign in to push changes to the cloud.',
     };
   }
 
@@ -297,8 +300,9 @@ export async function processOutboxQueue(
       } catch (err: unknown) {
         failedCount++;
         const msg = err instanceof Error ? err.message : String(err);
+        const sanitizedError = msg.substring(0, 50); // Sanitize error message
         lastError = msg;
-        console.warn(`[Sync Outbox] Operation ${op.id} (${op.entityType} ${op.entityId}) failed:`, msg);
+        console.warn(`[Sync Engine] Failure | Op: ${op.operationType} | Type: ${op.entityType} | ID: ${op.entityId} | Error: ${sanitizedError}`);
         await syncQueueService.markFailed(op.id, msg);
       }
     }
@@ -659,3 +663,79 @@ export async function reconcileLocalOnlyData(
     reconciledTerritories: localTerritories.length,
   };
 }
+
+/**
+ * Synchronizes all saved local data (territories, contacts, visits) in IndexedDB to Firestore.
+ * Enqueues all existing local records if not already in the outbox, then executes outbox flush.
+ */
+export async function syncAllSavedDataToFirestore(
+  user: FirebaseUser,
+  workspaceId = 'default'
+): Promise<PushResult> {
+  const [allTerritories, allPeople, allVisits] = await Promise.all([
+    territoryService.getAll(),
+    personService.getAll(),
+    visitService.getAll(),
+  ]);
+
+  // 1. Enqueue territories first
+  for (const terr of allTerritories) {
+    if (terr.isLocalOnly || !terr.workspaceId) {
+      await territoryService.save({
+        ...terr,
+        workspaceId,
+        isLocalOnly: false,
+        lastUpdatedBy: user.uid,
+      });
+    }
+    await syncQueueService.enqueue({
+      entityType: 'territory',
+      entityId: terr.id,
+      operationType: 'upsert',
+      payload: terr as unknown as Record<string, unknown>,
+      workspaceId,
+    });
+  }
+
+  // 2. Enqueue contacts second
+  for (const person of allPeople) {
+    if (person.isLocalOnly || !person.workspaceId) {
+      await personService.save({
+        ...person,
+        workspaceId,
+        isLocalOnly: false,
+        lastUpdatedBy: user.uid,
+      });
+    }
+    await syncQueueService.enqueue({
+      entityType: 'person',
+      entityId: person.id,
+      operationType: 'upsert',
+      payload: person as unknown as Record<string, unknown>,
+      workspaceId,
+    });
+  }
+
+  // 3. Enqueue visits third
+  for (const visit of allVisits) {
+    if (visit.isLocalOnly || !visit.workspaceId) {
+      await visitService.save({
+        ...visit,
+        workspaceId,
+        isLocalOnly: false,
+        lastUpdatedBy: user.uid,
+      });
+    }
+    await syncQueueService.enqueue({
+      entityType: 'visit',
+      entityId: visit.id,
+      operationType: 'upsert',
+      payload: visit as unknown as Record<string, unknown>,
+      workspaceId,
+    });
+  }
+
+  // 4. Process outbox queue
+  return await processOutboxQueue(user, true, workspaceId);
+}
+

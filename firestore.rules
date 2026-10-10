@@ -28,21 +28,12 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Shared Workspace Master Gate
-    // Requires an authenticated user with a membership document whose status is exactly 'approved'
-    function isApprovedMember(workspaceId) {
-      return isSignedIn()
-        && isValidId(workspaceId)
-        && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid))
-        && get(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.status == 'approved';
-    }
-
     // Test doc probe for client connection verification
     match /test/{docId} {
       allow get: if true;
     }
 
-    // User profiles (retained for user metadata and backward compatibility)
+    // User profiles (retained for user metadata and account-specific data)
     function isValidUser(data, userId) {
       return data.keys().hasAll(['id', 'email', 'createdAt', 'updatedAt'])
         && data.keys().hasOnly(['id', 'email', 'displayName', 'photoURL', 'createdAt', 'updatedAt'])
@@ -84,34 +75,27 @@ service cloud.firestore {
     }
 
     // ==========================================
-    // SHARED WORKSPACE SPECIFICATION (Phase 3E)
-    // Guest Read-Only Access & Authorized Editing
+    // CANONICAL SHARED WORKSPACE SPECIFICATION
+    // Paths: /workspaces/default/...
+    // Simplified Authorization: Successful sign-in is sufficient
     // ==========================================
 
     match /workspaces/{workspaceId} {
-      // Workspace root metadata: guests, unapproved users, and approved members can read
-      // Client creation/update/deletion is denied (provisioned via Firebase Console / Admin SDK)
+      // Workspace root metadata: anyone can read valid workspace metadata
+      // Client creation/update/deletion is denied
       allow get: if isValidId(workspaceId);
       allow list, create, update, delete: if false;
 
-      // 1. Members Subcollection
-      // - Authenticated users can read their own membership record to check approval status.
-      // - Approved members can also read fellow membership records and list members in their workspace.
-      // - Guests (unauthenticated) and unauthorized third parties CANNOT read membership records.
-      // - Client-side create, update, and delete are strictly denied.
-      //   Membership approval is managed manually through Firebase Console.
+      // 1. Members Subcollection (retained for backwards compatibility and audit)
+      // Signed-in users can read member records. Client mutations disabled.
       match /members/{memberId} {
-        allow get: if isValidId(workspaceId)
-          && isValidId(memberId)
-          && isSignedIn()
-          && (request.auth.uid == memberId || isApprovedMember(workspaceId));
-        allow list: if isValidId(workspaceId) && isApprovedMember(workspaceId);
+        allow get, list: if isValidId(workspaceId) && isValidId(memberId) && isSignedIn();
         allow create, update, delete: if false;
       }
 
       // 2. Shared People (Contacts)
-      // - Read: Guests, unapproved users, and approved members can get and list contacts.
-      // - Write: Only authenticated, approved members can create and update valid contacts.
+      // - Read: Guests and authenticated users can get and list contacts.
+      // - Write: Any authenticated user can create and update valid contacts.
       // - Delete: Client deletion strictly disabled to prevent orphaned visit history.
       function isValidPerson(data, wId) {
         return data.keys().hasAll(['id', 'workspaceId', 'createdBy', 'lastUpdatedBy', 'name', 'createdAt', 'updatedAt'])
@@ -132,7 +116,8 @@ service cloud.firestore {
 
       match /people/{personId} {
         allow get, list: if isValidId(workspaceId);
-        allow create: if isApprovedMember(workspaceId)
+        allow create: if isSignedIn()
+          && isValidId(workspaceId)
           && isValidId(personId)
           && isValidPerson(incoming(), workspaceId)
           && incoming().id == personId
@@ -146,7 +131,8 @@ service cloud.firestore {
             || incoming().territoryId == null
             || exists(/databases/$(database)/documents/workspaces/$(workspaceId)/territories/$(incoming().territoryId))
           );
-        allow update: if isApprovedMember(workspaceId)
+        allow update: if isSignedIn()
+          && isValidId(workspaceId)
           && isValidId(personId)
           && isValidPerson(incoming(), workspaceId)
           && incoming().id == existing().id
@@ -169,9 +155,9 @@ service cloud.firestore {
       }
 
       // 3. Shared Visits
-      // - Read: Guests, unapproved users, and approved members can get and list visits.
-      // - Write: Only authenticated, approved members can create and update valid visits.
-      // - Delete: Only authenticated, approved members can delete visits with valid ID.
+      // - Read: Guests and authenticated users can get and list visits.
+      // - Write: Any authenticated user can create and update valid visits.
+      // - Delete: Any authenticated user can delete visits with valid ID.
       function isValidVisit(data, wId) {
         return data.keys().hasAll(['id', 'workspaceId', 'personId', 'visitedAt', 'remarks', 'createdBy', 'lastUpdatedBy', 'createdAt', 'updatedAt'])
           && data.keys().hasOnly(['id', 'workspaceId', 'personId', 'visitedAt', 'remarks', 'createdBy', 'lastUpdatedBy', 'createdAt', 'updatedAt'])
@@ -188,7 +174,8 @@ service cloud.firestore {
 
       match /visits/{visitId} {
         allow get, list: if isValidId(workspaceId);
-        allow create: if isApprovedMember(workspaceId)
+        allow create: if isSignedIn()
+          && isValidId(workspaceId)
           && isValidId(visitId)
           && isValidVisit(incoming(), workspaceId)
           && incoming().id == visitId
@@ -198,7 +185,8 @@ service cloud.firestore {
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time
           && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/people/$(incoming().personId));
-        allow update: if isApprovedMember(workspaceId)
+        allow update: if isSignedIn()
+          && isValidId(workspaceId)
           && isValidId(visitId)
           && isValidVisit(incoming(), workspaceId)
           && incoming().id == existing().id
@@ -211,12 +199,12 @@ service cloud.firestore {
           && incoming().diff(existing()).affectedKeys().hasOnly([
             'visitedAt', 'remarks', 'lastUpdatedBy', 'updatedAt'
           ]);
-        allow delete: if isApprovedMember(workspaceId) && isValidId(visitId);
+        allow delete: if isSignedIn() && isValidId(workspaceId) && isValidId(visitId);
       }
 
       // 4. Shared Territories
-      // - Read: Guests, unapproved users, and approved members can get and list territories.
-      // - Write: Only authenticated, approved members can create and update valid territories.
+      // - Read: Guests and authenticated users can get and list territories.
+      // - Write: Any authenticated user can create and update valid territories.
       // - Delete: Client deletion strictly disabled to preserve person-to-territory links.
       function isValidTerritory(data, wId) {
         return data.keys().hasAll(['id', 'workspaceId', 'name', 'createdBy', 'lastUpdatedBy', 'createdAt', 'updatedAt'])
@@ -232,7 +220,8 @@ service cloud.firestore {
 
       match /territories/{territoryId} {
         allow get, list: if isValidId(workspaceId);
-        allow create: if isApprovedMember(workspaceId)
+        allow create: if isSignedIn()
+          && isValidId(workspaceId)
           && isValidId(territoryId)
           && isValidTerritory(incoming(), workspaceId)
           && incoming().id == territoryId
@@ -241,7 +230,8 @@ service cloud.firestore {
           && incoming().lastUpdatedBy == request.auth.uid
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time;
-        allow update: if isApprovedMember(workspaceId)
+        allow update: if isSignedIn()
+          && isValidId(workspaceId)
           && isValidId(territoryId)
           && isValidTerritory(incoming(), workspaceId)
           && incoming().id == existing().id
