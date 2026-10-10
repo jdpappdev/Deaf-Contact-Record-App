@@ -547,10 +547,14 @@ export function subscribeToUserSync(
       .catch((err) => console.warn('[Realtime Sync] Reconcile error:', err));
   };
 
+  const handleError = (err: unknown) => {
+    console.debug('[Realtime Sync] Snapshot disconnected or offline:', err);
+  };
+
   try {
-    const un1 = onSnapshot(collection(db, 'people'), handleRemoteSnapshot);
-    const un2 = onSnapshot(collection(db, 'territories'), handleRemoteSnapshot);
-    const un3 = onSnapshot(collection(db, 'visits'), handleRemoteSnapshot);
+    const un1 = onSnapshot(collection(db, 'people'), handleRemoteSnapshot, handleError);
+    const un2 = onSnapshot(collection(db, 'territories'), handleRemoteSnapshot, handleError);
+    const un3 = onSnapshot(collection(db, 'visits'), handleRemoteSnapshot, handleError);
     unsubs.push(un1, un2, un3);
     setTimeout(() => {
       initialLoaded = true;
@@ -560,7 +564,13 @@ export function subscribeToUserSync(
   }
 
   return () => {
-    unsubs.forEach((un) => un());
+    unsubs.forEach((un) => {
+      try {
+        un();
+      } catch {
+        // ignore cleanup errors
+      }
+    });
   };
 }
 

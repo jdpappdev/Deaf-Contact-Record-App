@@ -7,7 +7,7 @@ import { TerritoryList } from './components/territories/TerritoryList';
 import { ContactMapView } from './components/map/ContactMapView';
 import { SettingsView } from './components/settings/SettingsView';
 import { ToastContainer } from './components/common/ToastContainer';
-import { Contact, MapPin, Map, Settings, Loader2 } from 'lucide-react';
+import { Contact, MapPin, Map, Settings, Loader2, WifiOff } from 'lucide-react';
 
 const MainAppContent: React.FC = () => {
   const {
@@ -20,6 +20,7 @@ const MainAppContent: React.FC = () => {
     isLoading,
     user,
     signOut,
+    cloudSyncStatus,
   } = useApp();
 
   if (isLoading) {
@@ -43,6 +44,14 @@ const MainAppContent: React.FC = () => {
     <div className="min-h-screen bg-canvas-gradient text-[#14213D] flex flex-col selection:bg-[#0F766E]/20 selection:text-[#0F766E]">
       {/* Toast notifications */}
       <ToastContainer />
+
+      {/* Offline Indicator Banner */}
+      {(cloudSyncStatus === 'offline' || (typeof navigator !== 'undefined' && !navigator.onLine)) && (
+        <div className="bg-amber-500 text-slate-900 px-4 py-2 text-xs font-semibold text-center flex items-center justify-center gap-2 shadow-sm z-50">
+          <WifiOff className="w-4 h-4 shrink-0" />
+          <span>You are offline. Changes are saved locally and will sync when internet returns.</span>
+        </div>
+      )}
 
       {/* 1. Desktop Fixed Left Sidebar (visible on lg: screens and above) */}
       <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 w-64 xl:w-72 bg-white border-r border-[#E7E3DA] z-40 shadow-e1 justify-between select-none">

@@ -83,9 +83,14 @@ export function getDatabase(): Promise<IDBDatabase> {
 
     request.onsuccess = () => {
       const db = request.result;
-      // Close database connection if another tab/version requests an upgrade, preventing locks
       db.onversionchange = () => {
         db.close();
+        dbPromise = null;
+      };
+      db.onclose = () => {
+        dbPromise = null;
+      };
+      db.onerror = () => {
         dbPromise = null;
       };
       resolve(db);
@@ -104,57 +109,71 @@ export function getDatabase(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
+async function withDbRetry<T>(operation: (db: IDBDatabase) => Promise<T>): Promise<T> {
+  try {
+    const db = await getDatabase();
+    if ((db as any).closed) {
+      dbPromise = null;
+      const freshDb = await getDatabase();
+      return await operation(freshDb);
+    }
+    return await operation(db);
+  } catch (err: any) {
+    if (err && (err.name === 'InvalidStateError' || err.message?.includes('closing') || err.message?.includes('closed'))) {
+      dbPromise = null;
+      const freshDb = await getDatabase();
+      return await operation(freshDb);
+    }
+    throw err;
+  }
+}
+
 export async function getFromStore<T>(storeName: string, id: string): Promise<T | null> {
-  const db = await getDatabase();
-  return new Promise((resolve, reject) => {
+  return withDbRetry((db) => new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, 'readonly');
     const store = tx.objectStore(storeName);
     const req = store.get(id);
 
     req.onsuccess = () => resolve(req.result || null);
     req.onerror = () => reject(req.error);
-  });
+  }));
 }
 
 export async function getAllFromStore<T>(storeName: string): Promise<T[]> {
-  const db = await getDatabase();
-  return new Promise((resolve, reject) => {
+  return withDbRetry((db) => new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, 'readonly');
     const store = tx.objectStore(storeName);
     const req = store.getAll();
 
     req.onsuccess = () => resolve(req.result || []);
     req.onerror = () => reject(req.error);
-  });
+  }));
 }
 
 export async function putInStore<T>(storeName: string, value: T): Promise<void> {
-  const db = await getDatabase();
-  return new Promise((resolve, reject) => {
+  return withDbRetry((db) => new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, 'readwrite');
     const store = tx.objectStore(storeName);
     const req = store.put(value);
 
     req.onsuccess = () => resolve();
     req.onerror = () => reject(req.error);
-  });
+  }));
 }
 
 export async function deleteFromStore(storeName: string, id: string): Promise<void> {
-  const db = await getDatabase();
-  return new Promise((resolve, reject) => {
+  return withDbRetry((db) => new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, 'readwrite');
     const store = tx.objectStore(storeName);
     const req = store.delete(id);
 
     req.onsuccess = () => resolve();
     req.onerror = () => reject(req.error);
-  });
+  }));
 }
 
 export async function getByIndex<T>(storeName: string, indexName: string, value: IDBValidKey): Promise<T[]> {
-  const db = await getDatabase();
-  return new Promise((resolve, reject) => {
+  return withDbRetry((db) => new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, 'readonly');
     const store = tx.objectStore(storeName);
     const index = store.index(indexName);
@@ -162,19 +181,20 @@ export async function getByIndex<T>(storeName: string, indexName: string, value:
 
     req.onsuccess = () => resolve(req.result || []);
     req.onerror = () => reject(req.error);
-  });
+  }));
 }
 
 export async function clearAllStores(): Promise<void> {
-  const db = await getDatabase();
-  const tx = db.transaction([STORES.PEOPLE, STORES.VISITS, STORES.TERRITORIES, STORES.PHOTOS], 'readwrite');
-  tx.objectStore(STORES.PEOPLE).clear();
-  tx.objectStore(STORES.VISITS).clear();
-  tx.objectStore(STORES.TERRITORIES).clear();
-  tx.objectStore(STORES.PHOTOS).clear();
+  return withDbRetry((db) => {
+    const tx = db.transaction([STORES.PEOPLE, STORES.VISITS, STORES.TERRITORIES, STORES.PHOTOS], 'readwrite');
+    tx.objectStore(STORES.PEOPLE).clear();
+    tx.objectStore(STORES.VISITS).clear();
+    tx.objectStore(STORES.TERRITORIES).clear();
+    tx.objectStore(STORES.PHOTOS).clear();
 
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    return new Promise((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
   });
 }
