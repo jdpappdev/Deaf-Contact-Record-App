@@ -329,7 +329,7 @@ export async function processOutboxQueue(
  * Fetches all shared records from root collections (/people, /visits, /territories) and reconciles them into local IndexedDB.
  */
 export async function pullAndReconcileUserData(
-  userId: string
+  userId?: string | null
 ): Promise<PullResult> {
   let peopleSnap;
   let visitsSnap;
@@ -534,8 +534,8 @@ export async function pullAndReconcileUserData(
  * Sets up real-time listener for shared record updates.
  */
 export function subscribeToUserSync(
-  userId: string,
-  onRemoteChange: () => void
+  userId?: string | null,
+  onRemoteChange: () => void = () => {}
 ): Unsubscribe {
   let initialLoaded = false;
   const unsubs: Unsubscribe[] = [];

@@ -199,10 +199,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     refreshData();
   }, [refreshData]);
 
-  // Real-time synchronization subscription for user cloud records
+  // Real-time synchronization subscription for shared cloud records (works for guests and signed-in users)
   useEffect(() => {
-    if (!user) return;
-    const unsub = subscribeToUserSync(user.uid, () => {
+    const unsub = subscribeToUserSync(user?.uid || null, () => {
       refreshData();
     });
     return () => {
@@ -332,27 +331,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [user, openAuthPrompt, updatePendingCount, refreshData, showToast]);
 
   const pullFromCloud = useCallback(async (): Promise<PullResult> => {
-    if (!user) {
-      openAuthPrompt('pull records from cloud');
-      showToast('Sign in to pull records from cloud.', 'info');
-      return {
-        success: false,
-        addedCount: 0,
-        updatedCount: 0,
-        unchangedCount: 0,
-        skippedCount: 0,
-        totalRemoteCount: 0,
-        peopleCount: 0,
-        visitsCount: 0,
-        territoriesCount: 0,
-        errorMessage: 'Authentication required to pull from cloud.',
-      };
-    }
     try {
       setIsSyncing(true);
       setCloudSyncStatus('syncing');
 
-      const result = await pullAndReconcileUserData(user.uid);
+      const result = await pullAndReconcileUserData(user?.uid || null);
       setLastPullResult(result);
       await refreshData();
 
