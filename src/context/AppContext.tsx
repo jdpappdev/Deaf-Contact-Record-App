@@ -17,10 +17,9 @@ import {
 } from '../services/firebase';
 import {
   processOutboxQueue,
-  syncAllSavedDataToFirestore,
-  pullAndReconcileSharedData,
-  subscribeToSharedWorkspace,
-  reconcileLocalOnlyData,
+  promoteLocalDataToCloud,
+  pullAndReconcileUserData,
+  subscribeToUserSync,
   PullResult,
   PushResult,
 } from '../services/sharedSyncService';
@@ -181,7 +180,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setIsAuthLoading(false);
         if (currentUser) {
           setCloudSyncStatus('synced');
-          processOutboxQueue(currentUser, true).then(() => {
+          processOutboxQueue(currentUser).then(() => {
             updatePendingCount();
           }).catch((err) => console.warn('Outbox processing error on login:', err));
         } else {
@@ -200,22 +199,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     refreshData();
   }, [refreshData]);
 
-  // Real-time synchronization subscription for shared workspace
+  // Real-time synchronization subscription for user cloud records
   useEffect(() => {
-    const unsub = subscribeToSharedWorkspace('default', () => {
+    if (!user) return;
+    const unsub = subscribeToUserSync(user.uid, () => {
       refreshData();
     });
     return () => {
       unsub();
     };
-  }, [refreshData]);
+  }, [user, refreshData]);
 
   // Online / offline reconnect sync handler
   useEffect(() => {
     const handleOnline = () => {
       if (user) {
         setCloudSyncStatus('syncing');
-        processOutboxQueue(user, true)
+        processOutboxQueue(user)
           .then(() => {
             setCloudSyncStatus('synced');
             updatePendingCount();
@@ -296,25 +296,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setIsSyncing(true);
       setCloudSyncStatus('syncing');
 
-      // Sync all saved data (territories, contacts, visits) to Firestore
-      const result = await syncAllSavedDataToFirestore(user, 'default');
-      setLastPushResult(result);
+      const result = await promoteLocalDataToCloud(user);
+      setLastPushResult({
+        success: true,
+        processedCount: result.reconciledPeople + result.reconciledVisits + result.reconciledTerritories,
+        failedCount: 0,
+      });
       await updatePendingCount();
       await refreshData();
 
-      if (result.success) {
-        setCloudSyncStatus('synced');
-        showToast(
-          result.processedCount > 0
-            ? `Successfully synced ${result.processedCount} saved record(s) to Firestore`
-            : 'All saved data is already synchronized with Firestore',
-          'success'
-        );
-      } else {
-        setCloudSyncStatus('error');
-        showToast(`Sync completed with ${result.failedCount} error(s): ${result.errorMessage}`, 'error');
-      }
-      return result;
+      setCloudSyncStatus('synced');
+      showToast(
+        `Successfully synced local records to cloud`,
+        'success'
+      );
+      return {
+        success: true,
+        processedCount: result.reconciledPeople + result.reconciledVisits + result.reconciledTerritories,
+        failedCount: 0,
+      };
     } catch (err: unknown) {
       console.error('Cloud sync error:', err);
       setCloudSyncStatus('error');
@@ -329,15 +329,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } finally {
       setIsSyncing(false);
     }
-  }, [user, openAuthPrompt, updatePendingCount, showToast]);
+  }, [user, openAuthPrompt, updatePendingCount, refreshData, showToast]);
 
-  // Pull is public and available to signed-out guests and members alike
   const pullFromCloud = useCallback(async (): Promise<PullResult> => {
+    if (!user) {
+      openAuthPrompt('pull records from cloud');
+      showToast('Sign in to pull records from cloud.', 'info');
+      return {
+        success: false,
+        addedCount: 0,
+        updatedCount: 0,
+        unchangedCount: 0,
+        skippedCount: 0,
+        totalRemoteCount: 0,
+        peopleCount: 0,
+        visitsCount: 0,
+        territoriesCount: 0,
+        errorMessage: 'Authentication required to pull from cloud.',
+      };
+    }
     try {
       setIsSyncing(true);
       setCloudSyncStatus('syncing');
 
-      const result = await pullAndReconcileSharedData('default');
+      const result = await pullAndReconcileUserData(user.uid);
       setLastPullResult(result);
       await refreshData();
 
@@ -378,29 +393,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } finally {
       setIsSyncing(false);
     }
-  }, [refreshData, showToast]);
+  }, [user, openAuthPrompt, refreshData, showToast]);
 
   const reconcileLocalRecords = useCallback(async () => {
     if (!user) {
-      openAuthPrompt('reconcile local records to the shared workspace');
-      showToast('Sign in to reconcile local data', 'error');
+      openAuthPrompt('sync local records to cloud');
+      showToast('Sign in to sync local data', 'error');
       throw new Error('Not authorized');
     }
     try {
       setIsSyncing(true);
       setCloudSyncStatus('syncing');
 
-      const result = await reconcileLocalOnlyData(user, 'default');
+      const result = await promoteLocalDataToCloud(user);
       await refreshData();
       setCloudSyncStatus('synced');
       showToast(
-        `Reconciled ${result.reconciledPeople} contacts, ${result.reconciledVisits} visits, ${result.reconciledTerritories} territories to workspace`,
+        `Synced ${result.reconciledPeople} contacts, ${result.reconciledVisits} visits, ${result.reconciledTerritories} territories to cloud`,
         'success'
       );
       return result;
     } catch (err) {
       setCloudSyncStatus('error');
-      showToast('Reconciliation failed. Local records preserved.', 'error');
+      showToast('Sync failed. Local records preserved.', 'error');
       throw err;
     } finally {
       setIsSyncing(false);
@@ -435,7 +450,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         workspaceId: 'default',
       });
       await updatePendingCount();
-      processOutboxQueue(user, true).then(() => updatePendingCount()).catch(() => {});
+      processOutboxQueue(user).then(() => updatePendingCount()).catch(() => {});
 
       return saved;
     },
@@ -506,7 +521,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         workspaceId: 'default',
       });
       await updatePendingCount();
-      processOutboxQueue(user, true).then(() => updatePendingCount()).catch(() => {});
+      processOutboxQueue(user).then(() => updatePendingCount()).catch(() => {});
 
       return saved;
     },
@@ -532,7 +547,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         workspaceId: 'default',
       });
       await updatePendingCount();
-      processOutboxQueue(user, true).then(() => updatePendingCount()).catch(() => {});
+      processOutboxQueue(user).then(() => updatePendingCount()).catch(() => {});
     },
     [user, openAuthPrompt, showToast, refreshData, updatePendingCount]
   );
@@ -565,7 +580,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         workspaceId: 'default',
       });
       await updatePendingCount();
-      processOutboxQueue(user, true).then(() => updatePendingCount()).catch(() => {});
+      processOutboxQueue(user).then(() => updatePendingCount()).catch(() => {});
 
       return saved;
     },

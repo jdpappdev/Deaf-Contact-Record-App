@@ -1,3 +1,4 @@
+import { compressImage } from './imageCompression';
 import {
   Person,
   Visit,
@@ -274,11 +275,18 @@ export const photoService = {
   async savePhoto(blobOrFile: Blob | File, mimeType?: string): Promise<string> {
     const id = generateId();
     const type = mimeType || blobOrFile.type || 'image/jpeg';
-    const blob = blobOrFile instanceof Blob ? blobOrFile : new Blob([blobOrFile], { type });
+    let blob = blobOrFile instanceof Blob ? blobOrFile : new Blob([blobOrFile], { type });
+
+    try {
+      blob = await compressImage(blob, 512, 0.7);
+    } catch (e) {
+      console.warn('Compression failed, using original', e);
+    }
+
     const asset: PhotoAsset = {
       id,
       blob,
-      mimeType: type,
+      mimeType: blob.type || 'image/webp',
       createdAt: new Date().toISOString(),
     };
     await putInStore(STORES.PHOTOS, asset);
@@ -291,6 +299,21 @@ export const photoService = {
 
   async deletePhoto(id: string): Promise<void> {
     await deleteFromStore(STORES.PHOTOS, id);
+  },
+
+  async savePhotoDataUrlExplicit(id: string, dataUrl: string): Promise<void> {
+    try {
+      const blob = dataUrlToBlob(dataUrl);
+      const asset: PhotoAsset = {
+        id,
+        blob,
+        mimeType: blob.type || 'image/webp',
+        createdAt: new Date().toISOString(),
+      };
+      await putInStore(STORES.PHOTOS, asset);
+    } catch (e) {
+      console.warn('Failed to save explicit photo data url blob', e);
+    }
   },
 };
 
@@ -322,6 +345,7 @@ export const personService = {
       id: data.id || generateId(),
       name: data.name.trim(),
       photoRef: data.photoRef || null,
+      photoDataUrl: data.photoDataUrl || null,
       latitude: typeof data.latitude === 'number' && !isNaN(data.latitude) ? data.latitude : null,
       longitude: typeof data.longitude === 'number' && !isNaN(data.longitude) ? data.longitude : null,
       territoryId: data.territoryId || null,

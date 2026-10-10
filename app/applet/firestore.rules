@@ -1,0 +1,201 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Test doc probe for client connection verification
+    match /test/{docId} {
+      allow get: if true;
+    }
+
+    // User profiles and user-scoped data collections
+    function isValidUser(data, userId) {
+      return data.keys().hasAll(['id', 'email', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'email', 'displayName', 'photoURL', 'createdAt', 'updatedAt'])
+        && data.id == userId
+        && data.email is string && data.email.size() <= 254
+        && (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() <= 100))
+        && (!('photoURL' in data) || data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 1000))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && isValidUser(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isOwner(userId)
+        && isValidUser(incoming(), userId)
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt']);
+      allow delete: if false;
+
+      // 1. User People (Contacts)
+      function isValidPerson(data, uId) {
+        return data.keys().hasAll(['id', 'userId', 'createdBy', 'lastUpdatedBy', 'name', 'createdAt', 'updatedAt'])
+          && data.keys().hasOnly(['id', 'userId', 'createdBy', 'lastUpdatedBy', 'name', 'photoRef', 'photoDataUrl', 'latitude', 'longitude', 'territoryId', 'messengerUrl', 'createdAt', 'updatedAt'])
+          && data.id is string && isValidId(data.id)
+          && data.userId == uId
+          && data.createdBy is string && isValidId(data.createdBy)
+          && data.lastUpdatedBy == request.auth.uid
+          && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
+          && (!('photoRef' in data) || data.photoRef == null || (data.photoRef is string && data.photoRef.size() <= 128))
+          && (!('photoDataUrl' in data) || data.photoDataUrl == null || (data.photoDataUrl is string && data.photoDataUrl.size() <= 400000))
+          && (!('latitude' in data) || data.latitude == null || (data.latitude is number && data.latitude >= -90.0 && data.latitude <= 90.0))
+          && (!('longitude' in data) || data.longitude == null || (data.longitude is number && data.longitude >= -180.0 && data.longitude <= 180.0))
+          && (!('territoryId' in data) || data.territoryId == null || (data.territoryId is string && isValidId(data.territoryId)))
+          && (!('messengerUrl' in data) || data.messengerUrl == null || (data.messengerUrl is string && data.messengerUrl.size() <= 500))
+          && data.createdAt is timestamp
+          && data.updatedAt is timestamp;
+      }
+
+      match /people/{personId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidId(personId)
+          && isValidPerson(incoming(), userId)
+          && incoming().id == personId
+          && incoming().userId == userId
+          && incoming().createdBy == request.auth.uid
+          && incoming().lastUpdatedBy == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && (
+            !('territoryId' in incoming())
+            || incoming().territoryId == null
+            || exists(/databases/$(database)/documents/users/$(userId)/territories/$(incoming().territoryId))
+          );
+        allow update: if isOwner(userId)
+          && isValidId(personId)
+          && isValidPerson(incoming(), userId)
+          && incoming().id == existing().id
+          && incoming().userId == existing().userId
+          && incoming().createdBy == existing().createdBy
+          && incoming().lastUpdatedBy == request.auth.uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'photoRef', 'photoDataUrl', 'latitude', 'longitude', 'territoryId', 'messengerUrl', 'lastUpdatedBy', 'updatedAt'
+          ])
+          && (
+            !('territoryId' in incoming())
+            || incoming().territoryId == null
+            || incoming().territoryId == existing().territoryId
+            || exists(/databases/$(database)/documents/users/$(userId)/territories/$(incoming().territoryId))
+          );
+        allow delete: if isOwner(userId) && isValidId(personId);
+      }
+
+      // 2. User Visits
+      function isValidVisit(data, uId) {
+        return data.keys().hasAll(['id', 'userId', 'personId', 'visitedAt', 'remarks', 'createdBy', 'lastUpdatedBy', 'createdAt', 'updatedAt'])
+          && data.keys().hasOnly(['id', 'userId', 'personId', 'visitedAt', 'remarks', 'createdBy', 'lastUpdatedBy', 'createdAt', 'updatedAt'])
+          && data.id is string && isValidId(data.id)
+          && data.userId == uId
+          && data.personId is string && isValidId(data.personId)
+          && data.visitedAt is string && data.visitedAt.size() <= 50
+          && data.remarks is string && data.remarks.size() <= 2000
+          && data.createdBy is string && isValidId(data.createdBy)
+          && data.lastUpdatedBy == request.auth.uid
+          && data.createdAt is timestamp
+          && data.updatedAt is timestamp;
+      }
+
+      match /visits/{visitId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidId(visitId)
+          && isValidVisit(incoming(), userId)
+          && incoming().id == visitId
+          && incoming().userId == userId
+          && incoming().createdBy == request.auth.uid
+          && incoming().lastUpdatedBy == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId)/people/$(incoming().personId));
+        allow update: if isOwner(userId)
+          && isValidId(visitId)
+          && isValidVisit(incoming(), userId)
+          && incoming().id == existing().id
+          && incoming().userId == existing().userId
+          && incoming().personId == existing().personId
+          && incoming().createdBy == existing().createdBy
+          && incoming().lastUpdatedBy == request.auth.uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'visitedAt', 'remarks', 'lastUpdatedBy', 'updatedAt'
+          ]);
+        allow delete: if isOwner(userId) && isValidId(visitId);
+      }
+
+      // 3. User Territories
+      function isValidTerritory(data, uId) {
+        return data.keys().hasAll(['id', 'userId', 'name', 'createdBy', 'lastUpdatedBy', 'createdAt', 'updatedAt'])
+          && data.keys().hasOnly(['id', 'userId', 'name', 'createdBy', 'lastUpdatedBy', 'createdAt', 'updatedAt'])
+          && data.id is string && isValidId(data.id)
+          && data.userId == uId
+          && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
+          && data.createdBy is string && isValidId(data.createdBy)
+          && data.lastUpdatedBy == request.auth.uid
+          && data.createdAt is timestamp
+          && data.updatedAt is timestamp;
+      }
+
+      match /territories/{territoryId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidId(territoryId)
+          && isValidTerritory(incoming(), userId)
+          && incoming().id == territoryId
+          && incoming().userId == userId
+          && incoming().createdBy == request.auth.uid
+          && incoming().lastUpdatedBy == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isOwner(userId)
+          && isValidId(territoryId)
+          && isValidTerritory(incoming(), userId)
+          && incoming().id == existing().id
+          && incoming().userId == existing().userId
+          && incoming().createdBy == existing().createdBy
+          && incoming().lastUpdatedBy == request.auth.uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'lastUpdatedBy', 'updatedAt'
+          ]);
+        allow delete: if isOwner(userId) && isValidId(territoryId);
+      }
+    }
+  }
+}

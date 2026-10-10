@@ -432,4 +432,43 @@ describe('Shared Workspace & Offline Outbox Test Suite', () => {
     assert.equal(pending[1].entityType, 'person');
     assert.equal(pending[2].entityType, 'visit');
   });
+
+  it('12. Contact Profile Picture Sync: Person with compressed photoDataUrl and photoRef enqueues and preserves payload', async () => {
+    const queue = new MockOutboxStore();
+    const personWithPhoto: Person = {
+      id: 'e8fedcaa-00e5-49ad-8a43-a1dca5eaee60',
+      name: 'Maria Santos',
+      photoRef: 'photo_uuid_123',
+      photoDataUrl: 'data:image/webp;base64,UklGRkAAAABXRUJQVlA4IDQAAADwAQCdASoIAA...',
+      latitude: 14.5995,
+      longitude: 120.9842,
+      territoryId: null,
+      messengerUrl: 'https://m.me/mariasantos',
+      createdAt: '2026-10-10T00:00:00.000Z',
+      updatedAt: '2026-10-10T00:00:00.000Z',
+      workspaceId: 'default',
+      createdBy: 'auth_user_123',
+      lastUpdatedBy: 'auth_user_123',
+    };
+
+    const op = await queue.enqueue({
+      entityType: 'person',
+      entityId: personWithPhoto.id,
+      operationType: 'upsert',
+      payload: personWithPhoto as unknown as Record<string, unknown>,
+      workspaceId: 'default',
+    });
+
+    assert.equal(op.entityId, 'e8fedcaa-00e5-49ad-8a43-a1dca5eaee60');
+    assert.equal(op.entityType, 'person');
+    const storedPayload = op.payload as unknown as Person;
+    assert.equal(storedPayload.photoRef, 'photo_uuid_123');
+    assert.ok(storedPayload.photoDataUrl && storedPayload.photoDataUrl.startsWith('data:image/webp;base64,'));
+    assert.equal(storedPayload.name, 'Maria Santos');
+
+    // Simulate completion
+    await queue.markProcessing(op.id);
+    await queue.markCompleted(op.id);
+    assert.equal(queue.get(op.id), undefined, 'Completed operation safely resolved from queue');
+  });
 });

@@ -12,7 +12,7 @@ import {
   Unsubscribe,
 } from 'firebase/firestore';
 import { User as FirebaseUser } from 'firebase/auth';
-import { db, handleFirestoreError, OperationType } from './firebase';
+import { db } from './firebase';
 import {
   Person,
   Visit,
@@ -23,6 +23,7 @@ import {
   personService,
   visitService,
   territoryService,
+  photoService,
   syncQueueService,
 } from './dataService';
 
@@ -60,56 +61,78 @@ function timestampToISO(val: unknown): string {
 }
 
 /**
- * Pushes a single Person upsert to /workspaces/{workspaceId}/people/{personId}.
- * Complies with firestore.rules:
- * - createdBy & createdAt immutable on update
- * - lastUpdatedBy & updatedAt set to request.auth.uid & serverTimestamp()
+ * Pushes a single Person upsert to /people/{personId}.
  */
 export async function pushPersonToFirestore(
-  workspaceId: string,
-  person: Person,
-  userId: string
+  userId: string,
+  person: Person
 ): Promise<void> {
-  // If territoryId is referenced, verify parent territory exists in Firestore
-  if (person.territoryId) {
-    const terrRef = doc(db, 'workspaces', workspaceId, 'territories', person.territoryId);
+  let safeTerritoryId: string | null = person.territoryId || null;
+  if (safeTerritoryId) {
+    const terrRef = doc(db, 'territories', safeTerritoryId);
     const terrSnap = await getDoc(terrRef);
     if (!terrSnap.exists()) {
-      const localTerritory = await territoryService.getById(person.territoryId);
+      const localTerritory = await territoryService.getById(safeTerritoryId);
       if (localTerritory) {
-        await pushTerritoryToFirestore(workspaceId, localTerritory, userId);
+        await pushTerritoryToFirestore(userId, localTerritory);
+      } else {
+        safeTerritoryId = null;
       }
     }
   }
 
-  const docRef = doc(db, 'workspaces', workspaceId, 'people', person.id);
+  const safeName = (person.name && person.name.trim() ? person.name.trim() : 'Unnamed').slice(0, 100);
+  const safePhotoRef = person.photoRef && person.photoRef.length <= 128 ? person.photoRef : null;
+  let safePhotoDataUrl = person.photoDataUrl && person.photoDataUrl.length <= 400000 ? person.photoDataUrl : null;
+
+  if (!safePhotoDataUrl && safePhotoRef) {
+    try {
+      const photoAsset = await photoService.getPhoto(safePhotoRef);
+      if (photoAsset && photoAsset.blob) {
+        const blobObj: Blob = photoAsset.blob;
+        const reader = new FileReader();
+        safePhotoDataUrl = await new Promise<string | null>((resolve) => {
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(blobObj);
+        });
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const safeMessengerUrl = person.messengerUrl && person.messengerUrl.trim() ? person.messengerUrl.trim().slice(0, 500) : null;
+  const safeLat = typeof person.latitude === 'number' && !isNaN(person.latitude) && person.latitude >= -90 && person.latitude <= 90 ? person.latitude : null;
+  const safeLng = typeof person.longitude === 'number' && !isNaN(person.longitude) && person.longitude >= -180 && person.longitude <= 180 ? person.longitude : null;
+
+  const docRef = doc(db, 'people', person.id);
   const docSnap = await getDoc(docRef);
 
   if (!docSnap.exists()) {
-    // Document creation: createdBy must match request.auth.uid
     await setDoc(docRef, {
       id: person.id,
-      workspaceId,
       createdBy: userId,
       lastUpdatedBy: userId,
-      name: person.name.slice(0, 100),
-      photoRef: person.photoRef || null,
-      latitude: person.latitude ?? null,
-      longitude: person.longitude ?? null,
-      territoryId: person.territoryId || null,
-      messengerUrl: person.messengerUrl || null,
+      name: safeName,
+      photoRef: safePhotoRef,
+      photoDataUrl: safePhotoDataUrl,
+      latitude: safeLat,
+      longitude: safeLng,
+      territoryId: safeTerritoryId,
+      messengerUrl: safeMessengerUrl,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
   } else {
-    // Document update: only affect mutable fields
     await updateDoc(docRef, {
-      name: person.name.slice(0, 100),
-      photoRef: person.photoRef || null,
-      latitude: person.latitude ?? null,
-      longitude: person.longitude ?? null,
-      territoryId: person.territoryId || null,
-      messengerUrl: person.messengerUrl || null,
+      name: safeName,
+      photoRef: safePhotoRef,
+      photoDataUrl: safePhotoDataUrl,
+      latitude: safeLat,
+      longitude: safeLng,
+      territoryId: safeTerritoryId,
+      messengerUrl: safeMessengerUrl,
       lastUpdatedBy: userId,
       updatedAt: serverTimestamp(),
     });
@@ -117,20 +140,18 @@ export async function pushPersonToFirestore(
 }
 
 /**
- * Pushes a single Territory upsert to /workspaces/{workspaceId}/territories/{territoryId}.
+ * Pushes a single Territory upsert to /territories/{territoryId}.
  */
 export async function pushTerritoryToFirestore(
-  workspaceId: string,
-  territory: Territory,
-  userId: string
+  userId: string,
+  territory: Territory
 ): Promise<void> {
-  const docRef = doc(db, 'workspaces', workspaceId, 'territories', territory.id);
+  const docRef = doc(db, 'territories', territory.id);
   const docSnap = await getDoc(docRef);
 
   if (!docSnap.exists()) {
     await setDoc(docRef, {
       id: territory.id,
-      workspaceId,
       name: territory.name.slice(0, 100),
       createdBy: userId,
       lastUpdatedBy: userId,
@@ -147,34 +168,29 @@ export async function pushTerritoryToFirestore(
 }
 
 /**
- * Pushes a single Visit upsert to /workspaces/{workspaceId}/visits/{visitId}.
- * Requires parent person to exist in Firestore per security rules.
+ * Pushes a single Visit upsert to /visits/{visitId}.
  */
 export async function pushVisitToFirestore(
-  workspaceId: string,
-  visit: Visit,
-  userId: string
+  userId: string,
+  visit: Visit
 ): Promise<void> {
-  // Verify parent person exists in Firestore
-  const personRef = doc(db, 'workspaces', workspaceId, 'people', visit.personId);
+  const personRef = doc(db, 'people', visit.personId);
   const personSnap = await getDoc(personRef);
   if (!personSnap.exists()) {
-    // If person is locally available, ensure person is pushed first
     const localPerson = await personService.getById(visit.personId);
     if (localPerson) {
-      await pushPersonToFirestore(workspaceId, localPerson, userId);
+      await pushPersonToFirestore(userId, localPerson);
     } else {
-      throw new Error(`Referenced contact "${visit.personId}" does not exist in workspace.`);
+      throw new Error(`Referenced contact "${visit.personId}" does not exist in shared storage.`);
     }
   }
 
-  const docRef = doc(db, 'workspaces', workspaceId, 'visits', visit.id);
+  const docRef = doc(db, 'visits', visit.id);
   const docSnap = await getDoc(docRef);
 
   if (!docSnap.exists()) {
     await setDoc(docRef, {
       id: visit.id,
-      workspaceId,
       personId: visit.personId,
       visitedAt: visit.visitedAt.slice(0, 50),
       remarks: (visit.remarks || '').slice(0, 2000),
@@ -194,25 +210,21 @@ export async function pushVisitToFirestore(
 }
 
 /**
- * Deletes a Visit from /workspaces/{workspaceId}/visits/{visitId}.
- * Note: Only visits allow deletion under deployed security rules.
+ * Deletes a Visit from /visits/{visitId}.
  */
 export async function deleteVisitFromFirestore(
-  workspaceId: string,
+  userId: string,
   visitId: string
 ): Promise<void> {
-  const docRef = doc(db, 'workspaces', workspaceId, 'visits', visitId);
+  const docRef = doc(db, 'visits', visitId);
   await deleteDoc(docRef);
 }
 
 /**
  * Processes the durable IndexedDB outbox queue.
- * Safely handles retries, ordering, network outages, and rule validation.
  */
 export async function processOutboxQueue(
-  user: FirebaseUser | null,
-  _isApproved?: boolean,
-  workspaceId = 'default'
+  user: FirebaseUser | null
 ): Promise<PushResult> {
   if (isSyncRunning) {
     return {
@@ -223,7 +235,6 @@ export async function processOutboxQueue(
     };
   }
 
-  // Safety gate: Guest and unauthenticated users must not write shared data
   if (!user) {
     return {
       success: false,
@@ -253,11 +264,6 @@ export async function processOutboxQueue(
       return { success: true, processedCount: 0, failedCount: 0 };
     }
 
-    // Sort operations topologically for relational rule integrity:
-    // 1. Territories upsert (parent for people)
-    // 2. People upsert (parent for visits)
-    // 3. Visits upsert
-    // 4. Deletes (visits delete)
     const priorityWeight = (op: SyncOperation): number => {
       if (op.operationType === 'delete') return 10;
       if (op.entityType === 'territory') return 1;
@@ -274,22 +280,23 @@ export async function processOutboxQueue(
           if (op.entityType === 'territory') {
             const territory = (op.payload as unknown as Territory) || (await territoryService.getById(op.entityId));
             if (territory) {
-              await pushTerritoryToFirestore(workspaceId, territory, user.uid);
+              await pushTerritoryToFirestore(user.uid, territory);
             }
           } else if (op.entityType === 'person') {
             const person = (op.payload as unknown as Person) || (await personService.getById(op.entityId));
             if (person) {
-              await pushPersonToFirestore(workspaceId, person, user.uid);
+              await pushPersonToFirestore(user.uid, person);
             }
           } else if (op.entityType === 'visit') {
-            const visit = (op.payload as unknown as Visit) || (await visitService.getAll()).find((v) => v.id === op.entityId);
+            const visitsList = await visitService.getAll();
+            const visit = (op.payload as unknown as Visit) || visitsList.find((v: Visit) => v.id === op.entityId);
             if (visit) {
-              await pushVisitToFirestore(workspaceId, visit, user.uid);
+              await pushVisitToFirestore(user.uid, visit);
             }
           }
         } else if (op.operationType === 'delete') {
           if (op.entityType === 'visit') {
-            await deleteVisitFromFirestore(workspaceId, op.entityId);
+            await deleteVisitFromFirestore(user.uid, op.entityId);
           } else {
             console.info(`[Sync Engine] Cloud delete skipped for ${op.entityType} "${op.entityId}" per security policy.`);
           }
@@ -300,7 +307,7 @@ export async function processOutboxQueue(
       } catch (err: unknown) {
         failedCount++;
         const msg = err instanceof Error ? err.message : String(err);
-        const sanitizedError = msg.substring(0, 50); // Sanitize error message
+        const sanitizedError = msg.substring(0, 50);
         lastError = msg;
         console.warn(`[Sync Engine] Failure | Op: ${op.operationType} | Type: ${op.entityType} | ID: ${op.entityId} | Error: ${sanitizedError}`);
         await syncQueueService.markFailed(op.id, msg);
@@ -319,12 +326,10 @@ export async function processOutboxQueue(
 }
 
 /**
- * Fetches all shared records from /workspaces/{workspaceId} and reconciles them into local IndexedDB.
- * Respects local pending uncommitted changes in sync_queue.
- * Returns exact counts for added, updated, unchanged, and skipped records.
+ * Fetches all shared records from root collections (/people, /visits, /territories) and reconciles them into local IndexedDB.
  */
-export async function pullAndReconcileSharedData(
-  workspaceId = 'default'
+export async function pullAndReconcileUserData(
+  userId: string
 ): Promise<PullResult> {
   let peopleSnap;
   let visitsSnap;
@@ -334,20 +339,32 @@ export async function pullAndReconcileSharedData(
 
   try {
     const results = await Promise.allSettled([
-      getDocs(collection(db, 'workspaces', workspaceId, 'people')),
-      getDocs(collection(db, 'workspaces', workspaceId, 'visits')),
-      getDocs(collection(db, 'workspaces', workspaceId, 'territories')),
+      getDocs(collection(db, 'people')),
+      getDocs(collection(db, 'visits')),
+      getDocs(collection(db, 'territories')),
     ]);
 
-    if (results[0].status === 'fulfilled') peopleSnap = results[0].value;
-    else { isPartial = true; errorMsg = String(results[0].reason); }
+    if (results[0].status === 'fulfilled') {
+      peopleSnap = results[0].value;
+    } else {
+      isPartial = true;
+      errorMsg = results[0].reason instanceof Error ? results[0].reason.message : String(results[0].reason);
+    }
 
-    if (results[1].status === 'fulfilled') visitsSnap = results[1].value;
-    else { isPartial = true; errorMsg = String(results[1].reason); }
+    if (results[1].status === 'fulfilled') {
+      visitsSnap = results[1].value;
+    } else {
+      isPartial = true;
+      if (!errorMsg) errorMsg = results[1].reason instanceof Error ? results[1].reason.message : String(results[1].reason);
+    }
 
-    if (results[2].status === 'fulfilled') territoriesSnap = results[2].value;
-    else { isPartial = true; errorMsg = String(results[2].reason); }
-  } catch (err) {
+    if (results[2].status === 'fulfilled') {
+      territoriesSnap = results[2].value;
+    } else {
+      isPartial = true;
+      if (!errorMsg) errorMsg = results[2].reason instanceof Error ? results[2].reason.message : String(results[2].reason);
+    }
+  } catch (err: unknown) {
     return {
       success: false,
       addedCount: 0,
@@ -358,59 +375,43 @@ export async function pullAndReconcileSharedData(
       peopleCount: 0,
       visitsCount: 0,
       territoriesCount: 0,
-      errorMessage: err instanceof Error ? err.message : 'Network error pulling shared records.',
+      errorMessage: err instanceof Error ? err.message : String(err),
     };
   }
-
-  const pendingOps = await syncQueueService.getPending();
-  const pendingEntityKeys = new Set(pendingOps.map((o) => `${o.entityType}_${o.entityId}`));
 
   let addedCount = 0;
   let updatedCount = 0;
   let unchangedCount = 0;
-  let skippedCount = 0;
-  let peopleCount = 0;
-  let visitsCount = 0;
-  let territoriesCount = 0;
+  const skippedCount = 0;
 
   // 1. Reconcile Territories
+  const remoteTerritoriesMap = new Map<string, Territory>();
   if (territoriesSnap) {
     for (const docSnap of territoriesSnap.docs) {
-      const data = docSnap.data();
-      const id = docSnap.id;
-      territoriesCount++;
+      const data = docSnap.data() as Record<string, unknown>;
+      const terr: Territory = {
+        id: String(data.id || docSnap.id),
+        name: String(data.name || 'Untitled Territory'),
+        createdAt: timestampToISO(data.createdAt),
+        updatedAt: timestampToISO(data.updatedAt),
+      };
+      remoteTerritoriesMap.set(terr.id, terr);
+    }
+  }
 
-      if (pendingEntityKeys.has(`territory_${id}`)) {
-        skippedCount++;
-        continue;
-      }
+  const localTerritories = await territoryService.getAll();
+  const localTerritoriesMap = new Map<string, Territory>(localTerritories.map((t: Territory) => [t.id, t]));
 
-      const localTerritory = await territoryService.getById(id);
-      const remoteUpdatedAt = timestampToISO(data.updatedAt);
-
-      if (!localTerritory) {
-        await territoryService.save({
-          id,
-          name: data.name || '',
-          createdAt: timestampToISO(data.createdAt),
-          updatedAt: remoteUpdatedAt,
-          workspaceId,
-          createdBy: data.createdBy,
-          lastUpdatedBy: data.lastUpdatedBy,
-          isLocalOnly: false,
-        });
-        addedCount++;
-      } else if (new Date(remoteUpdatedAt).getTime() > new Date(localTerritory.updatedAt).getTime()) {
-        await territoryService.save({
-          id,
-          name: data.name || '',
-          createdAt: timestampToISO(data.createdAt),
-          updatedAt: remoteUpdatedAt,
-          workspaceId,
-          createdBy: data.createdBy,
-          lastUpdatedBy: data.lastUpdatedBy,
-          isLocalOnly: false,
-        });
+  for (const [id, remoteTerr] of remoteTerritoriesMap.entries() as IterableIterator<[string, Territory]>) {
+    const localTerr = localTerritoriesMap.get(id);
+    if (!localTerr) {
+      await territoryService.save(remoteTerr);
+      addedCount++;
+    } else {
+      const remoteTime = new Date(remoteTerr.updatedAt).getTime();
+      const localTime = new Date(localTerr.updatedAt).getTime();
+      if (remoteTime > localTime) {
+        await territoryService.save(remoteTerr);
         updatedCount++;
       } else {
         unchangedCount++;
@@ -418,54 +419,51 @@ export async function pullAndReconcileSharedData(
     }
   }
 
-  // 2. Reconcile People
+  // 2. Reconcile People & Photos
+  const remotePeopleMap = new Map<string, Person & { photoDataUrl?: string | null }>();
   if (peopleSnap) {
     for (const docSnap of peopleSnap.docs) {
-      const data = docSnap.data();
-      const id = docSnap.id;
-      peopleCount++;
+      const data = docSnap.data() as Record<string, unknown>;
+      const person: Person & { photoDataUrl?: string | null } = {
+        id: String(data.id || docSnap.id),
+        name: String(data.name || 'Unnamed'),
+        photoRef: typeof data.photoRef === 'string' ? data.photoRef : null,
+        photoDataUrl: typeof data.photoDataUrl === 'string' ? data.photoDataUrl : null,
+        latitude: typeof data.latitude === 'number' ? data.latitude : null,
+        longitude: typeof data.longitude === 'number' ? data.longitude : null,
+        territoryId: typeof data.territoryId === 'string' ? data.territoryId : null,
+        messengerUrl: typeof data.messengerUrl === 'string' ? data.messengerUrl : null,
+        createdAt: timestampToISO(data.createdAt),
+        updatedAt: timestampToISO(data.updatedAt),
+      };
+      remotePeopleMap.set(person.id, person);
 
-      if (pendingEntityKeys.has(`person_${id}`)) {
-        skippedCount++;
-        continue;
+      if (person.photoRef && person.photoDataUrl) {
+        try {
+          const existingPhoto = await photoService.getPhoto(person.photoRef);
+          if (!existingPhoto) {
+            await photoService.savePhotoDataUrlExplicit(person.photoRef, person.photoDataUrl);
+          }
+        } catch {
+          // ignore
+        }
       }
+    }
+  }
 
-      const localPerson = await personService.getById(id);
-      const remoteUpdatedAt = timestampToISO(data.updatedAt);
+  const localPeople = await personService.getAll();
+  const localPeopleMap = new Map<string, Person>(localPeople.map((p: Person) => [p.id, p]));
 
-      if (!localPerson) {
-        await personService.save({
-          id,
-          name: data.name || '',
-          photoRef: data.photoRef || null,
-          latitude: typeof data.latitude === 'number' ? data.latitude : null,
-          longitude: typeof data.longitude === 'number' ? data.longitude : null,
-          territoryId: data.territoryId || null,
-          messengerUrl: data.messengerUrl || null,
-          createdAt: timestampToISO(data.createdAt),
-          updatedAt: remoteUpdatedAt,
-          workspaceId,
-          createdBy: data.createdBy,
-          lastUpdatedBy: data.lastUpdatedBy,
-          isLocalOnly: false,
-        });
-        addedCount++;
-      } else if (new Date(remoteUpdatedAt).getTime() > new Date(localPerson.updatedAt).getTime()) {
-        await personService.save({
-          id,
-          name: data.name || '',
-          photoRef: data.photoRef || null,
-          latitude: typeof data.latitude === 'number' ? data.latitude : null,
-          longitude: typeof data.longitude === 'number' ? data.longitude : null,
-          territoryId: data.territoryId || null,
-          messengerUrl: data.messengerUrl || null,
-          createdAt: timestampToISO(data.createdAt),
-          updatedAt: remoteUpdatedAt,
-          workspaceId,
-          createdBy: data.createdBy,
-          lastUpdatedBy: data.lastUpdatedBy,
-          isLocalOnly: false,
-        });
+  for (const [id, remotePerson] of remotePeopleMap.entries() as IterableIterator<[string, Person & { photoDataUrl?: string | null }]>) {
+    const localPerson = localPeopleMap.get(id);
+    if (!localPerson) {
+      await personService.save(remotePerson);
+      addedCount++;
+    } else {
+      const remoteTime = new Date(remotePerson.updatedAt).getTime();
+      const localTime = new Date(localPerson.updatedAt).getTime();
+      if (remoteTime > localTime) {
+        await personService.save(remotePerson);
         updatedCount++;
       } else {
         unchangedCount++;
@@ -474,50 +472,37 @@ export async function pullAndReconcileSharedData(
   }
 
   // 3. Reconcile Visits
+  const remoteVisitsMap = new Map<string, Visit>();
   if (visitsSnap) {
-    const allLocalVisits = await visitService.getAll();
-    const localVisitsMap = new Map(allLocalVisits.map((v) => [v.id, v]));
-
     for (const docSnap of visitsSnap.docs) {
-      const data = docSnap.data();
-      const id = docSnap.id;
-      visitsCount++;
-
-      if (pendingEntityKeys.has(`visit_${id}`)) {
-        skippedCount++;
-        continue;
+      const data = docSnap.data() as Record<string, unknown>;
+      const visit: Visit = {
+        id: String(data.id || docSnap.id),
+        personId: String(data.personId || ''),
+        visitedAt: String(data.visitedAt || new Date().toISOString()),
+        remarks: String(data.remarks || ''),
+        createdAt: timestampToISO(data.createdAt),
+        updatedAt: timestampToISO(data.updatedAt),
+      };
+      if (visit.personId) {
+        remoteVisitsMap.set(visit.id, visit);
       }
+    }
+  }
 
-      const localVisit = localVisitsMap.get(id);
-      const remoteUpdatedAt = timestampToISO(data.updatedAt);
+  const localVisits = await visitService.getAll();
+  const localVisitsMap = new Map<string, Visit>(localVisits.map((v: Visit) => [v.id, v]));
 
-      if (!localVisit) {
-        await visitService.save({
-          id,
-          personId: data.personId || '',
-          visitedAt: data.visitedAt || new Date().toISOString(),
-          remarks: data.remarks || '',
-          createdAt: timestampToISO(data.createdAt),
-          updatedAt: remoteUpdatedAt,
-          workspaceId,
-          createdBy: data.createdBy,
-          lastUpdatedBy: data.lastUpdatedBy,
-          isLocalOnly: false,
-        });
-        addedCount++;
-      } else if (new Date(remoteUpdatedAt).getTime() > new Date(localVisit.updatedAt).getTime()) {
-        await visitService.save({
-          id,
-          personId: data.personId || '',
-          visitedAt: data.visitedAt || new Date().toISOString(),
-          remarks: data.remarks || '',
-          createdAt: timestampToISO(data.createdAt),
-          updatedAt: remoteUpdatedAt,
-          workspaceId,
-          createdBy: data.createdBy,
-          lastUpdatedBy: data.lastUpdatedBy,
-          isLocalOnly: false,
-        });
+  for (const [id, remoteVisit] of remoteVisitsMap.entries() as IterableIterator<[string, Visit]>) {
+    const localVisit = localVisitsMap.get(id);
+    if (!localVisit) {
+      await visitService.save(remoteVisit);
+      addedCount++;
+    } else {
+      const remoteTime = new Date(remoteVisit.updatedAt).getTime();
+      const localTime = new Date(localVisit.updatedAt).getTime();
+      if (remoteTime > localTime) {
+        await visitService.save(remoteVisit);
         updatedCount++;
       } else {
         unchangedCount++;
@@ -525,28 +510,31 @@ export async function pullAndReconcileSharedData(
     }
   }
 
-  const totalRemoteCount = peopleCount + visitsCount + territoriesCount;
+  const totalPeople = peopleSnap ? peopleSnap.size : 0;
+  const totalVisits = visitsSnap ? visitsSnap.size : 0;
+  const totalTerritories = territoriesSnap ? territoriesSnap.size : 0;
+  const totalRemoteCount = totalPeople + totalVisits + totalTerritories;
 
   return {
-    success: !isPartial,
+    success: true,
     addedCount,
     updatedCount,
     unchangedCount,
     skippedCount,
     totalRemoteCount,
-    peopleCount,
-    visitsCount,
-    territoriesCount,
+    peopleCount: totalPeople,
+    visitsCount: totalVisits,
+    territoriesCount: totalTerritories,
     isPartial,
     errorMessage: isPartial ? (errorMsg || 'Some collections could not be fetched.') : null,
   };
 }
 
 /**
- * Sets up real-time listener for shared workspace updates.
+ * Sets up real-time listener for shared record updates.
  */
-export function subscribeToSharedWorkspace(
-  workspaceId: string,
+export function subscribeToUserSync(
+  userId: string,
   onRemoteChange: () => void
 ): Unsubscribe {
   let initialLoaded = false;
@@ -554,15 +542,15 @@ export function subscribeToSharedWorkspace(
 
   const handleRemoteSnapshot = () => {
     if (!initialLoaded) return;
-    pullAndReconcileSharedData(workspaceId)
+    pullAndReconcileUserData(userId)
       .then(() => onRemoteChange())
       .catch((err) => console.warn('[Realtime Sync] Reconcile error:', err));
   };
 
   try {
-    const un1 = onSnapshot(collection(db, 'workspaces', workspaceId, 'people'), handleRemoteSnapshot);
-    const un2 = onSnapshot(collection(db, 'workspaces', workspaceId, 'territories'), handleRemoteSnapshot);
-    const un3 = onSnapshot(collection(db, 'workspaces', workspaceId, 'visits'), handleRemoteSnapshot);
+    const un1 = onSnapshot(collection(db, 'people'), handleRemoteSnapshot);
+    const un2 = onSnapshot(collection(db, 'territories'), handleRemoteSnapshot);
+    const un3 = onSnapshot(collection(db, 'visits'), handleRemoteSnapshot);
     unsubs.push(un1, un2, un3);
     setTimeout(() => {
       initialLoaded = true;
@@ -577,13 +565,10 @@ export function subscribeToSharedWorkspace(
 }
 
 /**
- * Safe reconciliation path for existing local-only data.
- * Protects pre-existing records and never automatically uploads them without explicit member action.
- * Avoids duplicate records and preserves local history.
+ * Promotes local records to shared cloud storage.
  */
-export async function reconcileLocalOnlyData(
-  user: FirebaseUser,
-  workspaceId = 'default'
+export async function promoteLocalDataToCloud(
+  user: FirebaseUser
 ): Promise<{
   reconciledPeople: number;
   reconciledVisits: number;
@@ -595,147 +580,30 @@ export async function reconcileLocalOnlyData(
     territoryService.getAll(),
   ]);
 
-  // Identify records that have never been linked to a workspace
-  const localPeople = allPeople.filter((p) => p.isLocalOnly === true || !p.workspaceId);
-  const localTerritories = allTerritories.filter((t) => t.isLocalOnly === true || !t.workspaceId);
-  const localVisits = allVisits.filter((v) => v.isLocalOnly === true || !v.workspaceId);
+  let reconciledPeople = 0;
+  let reconciledVisits = 0;
+  let reconciledTerritories = 0;
 
-  // 1. Promote territories to shared workspace and enqueue
-  for (const terr of localTerritories) {
-    const updated = await territoryService.save({
-      ...terr,
-      workspaceId,
-      createdBy: terr.createdBy || user.uid,
-      lastUpdatedBy: user.uid,
-      isLocalOnly: false,
-    });
-    await syncQueueService.enqueue({
-      entityType: 'territory',
-      entityId: updated.id,
-      operationType: 'upsert',
-      payload: updated as unknown as Record<string, unknown>,
-      workspaceId,
-    });
+  for (const terr of allTerritories) {
+    await pushTerritoryToFirestore(user.uid, terr);
+    reconciledTerritories++;
   }
 
-  // 2. Promote people to shared workspace and enqueue
-  for (const person of localPeople) {
-    const updated = await personService.save({
-      ...person,
-      workspaceId,
-      createdBy: person.createdBy || user.uid,
-      lastUpdatedBy: user.uid,
-      isLocalOnly: false,
-    });
-    await syncQueueService.enqueue({
-      entityType: 'person',
-      entityId: updated.id,
-      operationType: 'upsert',
-      payload: updated as unknown as Record<string, unknown>,
-      workspaceId,
-    });
+  for (const person of allPeople) {
+    await pushPersonToFirestore(user.uid, person);
+    reconciledPeople++;
   }
 
-  // 3. Promote visits to shared workspace and enqueue
-  for (const visit of localVisits) {
-    const updated = await visitService.save({
-      ...visit,
-      workspaceId,
-      createdBy: visit.createdBy || user.uid,
-      lastUpdatedBy: user.uid,
-      isLocalOnly: false,
-    });
-    await syncQueueService.enqueue({
-      entityType: 'visit',
-      entityId: updated.id,
-      operationType: 'upsert',
-      payload: updated as unknown as Record<string, unknown>,
-      workspaceId,
-    });
+  for (const visit of allVisits) {
+    await pushVisitToFirestore(user.uid, visit);
+    reconciledVisits++;
   }
 
-  // Trigger outbox processing
-  await processOutboxQueue(user, true, workspaceId);
+  await processOutboxQueue(user);
 
   return {
-    reconciledPeople: localPeople.length,
-    reconciledVisits: localVisits.length,
-    reconciledTerritories: localTerritories.length,
+    reconciledPeople,
+    reconciledVisits,
+    reconciledTerritories,
   };
 }
-
-/**
- * Synchronizes all saved local data (territories, contacts, visits) in IndexedDB to Firestore.
- * Enqueues all existing local records if not already in the outbox, then executes outbox flush.
- */
-export async function syncAllSavedDataToFirestore(
-  user: FirebaseUser,
-  workspaceId = 'default'
-): Promise<PushResult> {
-  const [allTerritories, allPeople, allVisits] = await Promise.all([
-    territoryService.getAll(),
-    personService.getAll(),
-    visitService.getAll(),
-  ]);
-
-  // 1. Enqueue territories first
-  for (const terr of allTerritories) {
-    if (terr.isLocalOnly || !terr.workspaceId) {
-      await territoryService.save({
-        ...terr,
-        workspaceId,
-        isLocalOnly: false,
-        lastUpdatedBy: user.uid,
-      });
-    }
-    await syncQueueService.enqueue({
-      entityType: 'territory',
-      entityId: terr.id,
-      operationType: 'upsert',
-      payload: terr as unknown as Record<string, unknown>,
-      workspaceId,
-    });
-  }
-
-  // 2. Enqueue contacts second
-  for (const person of allPeople) {
-    if (person.isLocalOnly || !person.workspaceId) {
-      await personService.save({
-        ...person,
-        workspaceId,
-        isLocalOnly: false,
-        lastUpdatedBy: user.uid,
-      });
-    }
-    await syncQueueService.enqueue({
-      entityType: 'person',
-      entityId: person.id,
-      operationType: 'upsert',
-      payload: person as unknown as Record<string, unknown>,
-      workspaceId,
-    });
-  }
-
-  // 3. Enqueue visits third
-  for (const visit of allVisits) {
-    if (visit.isLocalOnly || !visit.workspaceId) {
-      await visitService.save({
-        ...visit,
-        workspaceId,
-        isLocalOnly: false,
-        lastUpdatedBy: user.uid,
-      });
-    }
-    await syncQueueService.enqueue({
-      entityType: 'visit',
-      entityId: visit.id,
-      operationType: 'upsert',
-      payload: visit as unknown as Record<string, unknown>,
-      workspaceId,
-    });
-  }
-
-  // 4. Process outbox queue
-  return await processOutboxQueue(user, true, workspaceId);
-}
-

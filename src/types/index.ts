@@ -2,6 +2,7 @@ export interface Person {
   id: string;
   name: string;
   photoRef: string | null;
+  photoDataUrl?: string | null;
   latitude: number | null;
   longitude: number | null;
   territoryId: string | null;

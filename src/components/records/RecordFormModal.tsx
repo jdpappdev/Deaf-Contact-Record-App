@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Person } from '../../types';
 import { useApp } from '../../context/AppContext';
-import { photoService, isValidUrl, getExternalUrl } from '../../services/dataService';
+import { photoService, isValidUrl, getExternalUrl, blobToDataUrl } from '../../services/dataService';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { PrimaryButton } from '../common/PrimaryButton';
 import {
@@ -60,7 +60,13 @@ export const RecordFormModal: React.FC<RecordFormModalProps> = ({
 
       if (initialPerson.photoRef) {
         loadPhotoUrl(initialPerson.photoRef).then((url) => {
-          setPhotoPreview(url);
+          if (url) {
+            setPhotoPreview(url);
+          } else if (initialPerson.photoDataUrl) {
+            setPhotoPreview(initialPerson.photoDataUrl);
+          } else {
+            setPhotoPreview(null);
+          }
         });
       } else {
         setPhotoPreview(null);
@@ -210,10 +216,21 @@ export const RecordFormModal: React.FC<RecordFormModalProps> = ({
         return;
       }
 
+      let photoDataUrl = null;
+      if (photoRef) {
+        const photo = await photoService.getPhoto(photoRef);
+        if (photo && photo.blob) {
+          photoDataUrl = await blobToDataUrl(photo.blob);
+        } else if (photo && photo.dataUrl) {
+          photoDataUrl = photo.dataUrl;
+        }
+      }
+
       const saved = await savePerson({
         id: initialPerson?.id,
         name: name.trim(),
         photoRef,
+        photoDataUrl,
         latitude,
         longitude,
         territoryId: territoryId || null,

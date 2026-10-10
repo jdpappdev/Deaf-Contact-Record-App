@@ -69,20 +69,14 @@ export const AuthPromptModal: React.FC<AuthPromptModalProps> = ({
         </div>
 
         <div className="mt-4 text-sm text-slate-600 leading-relaxed bg-slate-50 rounded-[12px] p-3.5 border border-slate-200/80">
-          {isPending ? (
             <p>
-              Your account (<strong className="text-slate-800">{user?.email}</strong>) is signed in but pending administrator approval for workspace <code className="text-xs font-mono bg-white px-1 py-0.5 rounded border border-slate-200">/workspaces/default</code>. Only approved members may {actionName}.
+              You are currently in <strong>Read-Only Guest Mode</strong>. Guests can browse local records. To {actionName}, please sign in to your account.
             </p>
-          ) : (
-            <p>
-              You are currently in <strong>Read-Only Guest Mode</strong>. Guests can browse local records and pull shared data from the cloud. To {actionName}, please sign in with an authorized workspace member account.
-            </p>
-          )}
         </div>
 
         <div className="mt-3 text-xs text-slate-500 flex items-center gap-1.5">
           <CloudDownload className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>You can still download and view public workspace records in Settings.</span>
+          <span>You can sign in and sync your records across devices in Settings.</span>
         </div>
 
         <div className="mt-6 flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5">
@@ -100,7 +94,7 @@ export const AuthPromptModal: React.FC<AuthPromptModalProps> = ({
             className="w-full sm:w-auto px-5 py-2.5 rounded-[12px] text-xs font-semibold text-white bg-[#0F766E] hover:bg-[#0D655E] shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
           >
             <LogIn className="w-4 h-4" />
-            <span>{isPending ? 'View Account Status' : 'Sign In to Workspace'}</span>
+            <span>Sign In</span>
           </button>
         </div>
       </div>

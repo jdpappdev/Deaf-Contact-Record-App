@@ -2,11 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Default deny catch-all
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
     // Helper functions
     function isValidId(id) {
       return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
@@ -33,7 +28,7 @@ service cloud.firestore {
       allow get: if true;
     }
 
-    // User profiles (retained for user metadata and account-specific data)
+    // User profiles (private user profile data only)
     function isValidUser(data, userId) {
       return data.keys().hasAll(['id', 'email', 'createdAt', 'updatedAt'])
         && data.keys().hasOnly(['id', 'email', 'displayName', 'photoURL', 'createdAt', 'updatedAt'])
@@ -75,177 +70,97 @@ service cloud.firestore {
     }
 
     // ==========================================
-    // CANONICAL SHARED WORKSPACE SPECIFICATION
-    // Paths: /workspaces/default/...
-    // Simplified Authorization: Successful sign-in is sufficient
+    // CONGREGATION-WIDE SHARED ROOT COLLECTIONS
+    // - Anyone can read (guests + authenticated users)
+    // - Authenticated users can create, update, and delete
     // ==========================================
 
-    match /workspaces/{workspaceId} {
-      // Workspace root metadata: anyone can read valid workspace metadata
-      // Client creation/update/deletion is denied
-      allow get: if isValidId(workspaceId);
-      allow list, create, update, delete: if false;
+    match /people/{personId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && isValidId(personId)
+        && incoming().id == personId
+        && incoming().createdBy == request.auth.uid
+        && incoming().lastUpdatedBy == request.auth.uid
+        && incoming().name is string && incoming().name.size() >= 1 && incoming().name.size() <= 100
+        && (!('photoRef' in incoming()) || incoming().photoRef == null || (incoming().photoRef is string && incoming().photoRef.size() <= 128))
+        && (!('photoDataUrl' in incoming()) || incoming().photoDataUrl == null || (incoming().photoDataUrl is string && incoming().photoDataUrl.size() <= 400000))
+        && (!('latitude' in incoming()) || incoming().latitude == null || (incoming().latitude is number && incoming().latitude >= -90.0 && incoming().latitude <= 90.0))
+        && (!('longitude' in incoming()) || incoming().longitude == null || (incoming().longitude is number && incoming().longitude >= -180.0 && incoming().longitude <= 180.0))
+        && (!('territoryId' in incoming()) || incoming().territoryId == null || (incoming().territoryId is string && isValidId(incoming().territoryId)))
+        && (!('messengerUrl' in incoming()) || incoming().messengerUrl == null || (incoming().messengerUrl is string && incoming().messengerUrl.size() <= 500))
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedIn()
+        && isValidId(personId)
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().lastUpdatedBy == request.auth.uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().name is string && incoming().name.size() >= 1 && incoming().name.size() <= 100
+        && (!('photoRef' in incoming()) || incoming().photoRef == null || (incoming().photoRef is string && incoming().photoRef.size() <= 128))
+        && (!('photoDataUrl' in incoming()) || incoming().photoDataUrl == null || (incoming().photoDataUrl is string && incoming().photoDataUrl.size() <= 400000))
+        && (!('latitude' in incoming()) || incoming().latitude == null || (incoming().latitude is number && incoming().latitude >= -90.0 && incoming().latitude <= 90.0))
+        && (!('longitude' in incoming()) || incoming().longitude == null || (incoming().longitude is number && incoming().longitude >= -180.0 && incoming().longitude <= 180.0))
+        && (!('territoryId' in incoming()) || incoming().territoryId == null || (incoming().territoryId is string && isValidId(incoming().territoryId)))
+        && (!('messengerUrl' in incoming()) || incoming().messengerUrl == null || (incoming().messengerUrl is string && incoming().messengerUrl.size() <= 500))
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'photoRef', 'photoDataUrl', 'latitude', 'longitude', 'territoryId', 'messengerUrl', 'lastUpdatedBy', 'updatedAt'
+        ]);
+      allow delete: if isSignedIn();
+    }
 
-      // 1. Members Subcollection (retained for backwards compatibility and audit)
-      // Signed-in users can read member records. Client mutations disabled.
-      match /members/{memberId} {
-        allow get, list: if isValidId(workspaceId) && isValidId(memberId) && isSignedIn();
-        allow create, update, delete: if false;
-      }
+    match /visits/{visitId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && isValidId(visitId)
+        && incoming().id == visitId
+        && incoming().personId is string && isValidId(incoming().personId)
+        && incoming().visitedAt is string && incoming().visitedAt.size() <= 50
+        && incoming().remarks is string && incoming().remarks.size() <= 2000
+        && incoming().createdBy == request.auth.uid
+        && incoming().lastUpdatedBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedIn()
+        && isValidId(visitId)
+        && incoming().id == existing().id
+        && incoming().personId == existing().personId
+        && incoming().createdBy == existing().createdBy
+        && incoming().lastUpdatedBy == request.auth.uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().visitedAt is string && incoming().visitedAt.size() <= 50
+        && incoming().remarks is string && incoming().remarks.size() <= 2000
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'visitedAt', 'remarks', 'lastUpdatedBy', 'updatedAt'
+        ]);
+      allow delete: if isSignedIn();
+    }
 
-      // 2. Shared People (Contacts)
-      // - Read: Guests and authenticated users can get and list contacts.
-      // - Write: Any authenticated user can create and update valid contacts.
-      // - Delete: Client deletion strictly disabled to prevent orphaned visit history.
-      function isValidPerson(data, wId) {
-        return data.keys().hasAll(['id', 'workspaceId', 'createdBy', 'lastUpdatedBy', 'name', 'createdAt', 'updatedAt'])
-          && data.keys().hasOnly(['id', 'workspaceId', 'createdBy', 'lastUpdatedBy', 'name', 'photoRef', 'latitude', 'longitude', 'territoryId', 'messengerUrl', 'createdAt', 'updatedAt'])
-          && data.id is string && isValidId(data.id)
-          && data.workspaceId == wId
-          && data.createdBy is string && isValidId(data.createdBy)
-          && data.lastUpdatedBy == request.auth.uid
-          && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
-          && (!('photoRef' in data) || data.photoRef == null || (data.photoRef is string && data.photoRef.size() <= 128))
-          && (!('latitude' in data) || data.latitude == null || (data.latitude is number && data.latitude >= -90.0 && data.latitude <= 90.0))
-          && (!('longitude' in data) || data.longitude == null || (data.longitude is number && data.longitude >= -180.0 && data.longitude <= 180.0))
-          && (!('territoryId' in data) || data.territoryId == null || (data.territoryId is string && isValidId(data.territoryId)))
-          && (!('messengerUrl' in data) || data.messengerUrl == null || (data.messengerUrl is string && data.messengerUrl.size() <= 500))
-          && data.createdAt is timestamp
-          && data.updatedAt is timestamp;
-      }
-
-      match /people/{personId} {
-        allow get, list: if isValidId(workspaceId);
-        allow create: if isSignedIn()
-          && isValidId(workspaceId)
-          && isValidId(personId)
-          && isValidPerson(incoming(), workspaceId)
-          && incoming().id == personId
-          && incoming().workspaceId == workspaceId
-          && incoming().createdBy == request.auth.uid
-          && incoming().lastUpdatedBy == request.auth.uid
-          && incoming().createdAt == request.time
-          && incoming().updatedAt == request.time
-          && (
-            !('territoryId' in incoming())
-            || incoming().territoryId == null
-            || exists(/databases/$(database)/documents/workspaces/$(workspaceId)/territories/$(incoming().territoryId))
-          );
-        allow update: if isSignedIn()
-          && isValidId(workspaceId)
-          && isValidId(personId)
-          && isValidPerson(incoming(), workspaceId)
-          && incoming().id == existing().id
-          && incoming().workspaceId == existing().workspaceId
-          && incoming().createdBy == existing().createdBy
-          && incoming().lastUpdatedBy == request.auth.uid
-          && incoming().createdAt == existing().createdAt
-          && incoming().updatedAt == request.time
-          && incoming().diff(existing()).affectedKeys().hasOnly([
-            'name', 'photoRef', 'latitude', 'longitude', 'territoryId', 'messengerUrl', 'lastUpdatedBy', 'updatedAt'
-          ])
-          && (
-            !('territoryId' in incoming())
-            || incoming().territoryId == null
-            || incoming().territoryId == existing().territoryId
-            || exists(/databases/$(database)/documents/workspaces/$(workspaceId)/territories/$(incoming().territoryId))
-          );
-        // Client deletion disabled to prevent orphaned visit history and preserve audit trail
-        allow delete: if false;
-      }
-
-      // 3. Shared Visits
-      // - Read: Guests and authenticated users can get and list visits.
-      // - Write: Any authenticated user can create and update valid visits.
-      // - Delete: Any authenticated user can delete visits with valid ID.
-      function isValidVisit(data, wId) {
-        return data.keys().hasAll(['id', 'workspaceId', 'personId', 'visitedAt', 'remarks', 'createdBy', 'lastUpdatedBy', 'createdAt', 'updatedAt'])
-          && data.keys().hasOnly(['id', 'workspaceId', 'personId', 'visitedAt', 'remarks', 'createdBy', 'lastUpdatedBy', 'createdAt', 'updatedAt'])
-          && data.id is string && isValidId(data.id)
-          && data.workspaceId == wId
-          && data.personId is string && isValidId(data.personId)
-          && data.visitedAt is string && data.visitedAt.size() <= 50
-          && data.remarks is string && data.remarks.size() <= 2000
-          && data.createdBy is string && isValidId(data.createdBy)
-          && data.lastUpdatedBy == request.auth.uid
-          && data.createdAt is timestamp
-          && data.updatedAt is timestamp;
-      }
-
-      match /visits/{visitId} {
-        allow get, list: if isValidId(workspaceId);
-        allow create: if isSignedIn()
-          && isValidId(workspaceId)
-          && isValidId(visitId)
-          && isValidVisit(incoming(), workspaceId)
-          && incoming().id == visitId
-          && incoming().workspaceId == workspaceId
-          && incoming().createdBy == request.auth.uid
-          && incoming().lastUpdatedBy == request.auth.uid
-          && incoming().createdAt == request.time
-          && incoming().updatedAt == request.time
-          && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/people/$(incoming().personId));
-        allow update: if isSignedIn()
-          && isValidId(workspaceId)
-          && isValidId(visitId)
-          && isValidVisit(incoming(), workspaceId)
-          && incoming().id == existing().id
-          && incoming().workspaceId == existing().workspaceId
-          && incoming().personId == existing().personId
-          && incoming().createdBy == existing().createdBy
-          && incoming().lastUpdatedBy == request.auth.uid
-          && incoming().createdAt == existing().createdAt
-          && incoming().updatedAt == request.time
-          && incoming().diff(existing()).affectedKeys().hasOnly([
-            'visitedAt', 'remarks', 'lastUpdatedBy', 'updatedAt'
-          ]);
-        allow delete: if isSignedIn() && isValidId(workspaceId) && isValidId(visitId);
-      }
-
-      // 4. Shared Territories
-      // - Read: Guests and authenticated users can get and list territories.
-      // - Write: Any authenticated user can create and update valid territories.
-      // - Delete: Client deletion strictly disabled to preserve person-to-territory links.
-      function isValidTerritory(data, wId) {
-        return data.keys().hasAll(['id', 'workspaceId', 'name', 'createdBy', 'lastUpdatedBy', 'createdAt', 'updatedAt'])
-          && data.keys().hasOnly(['id', 'workspaceId', 'name', 'createdBy', 'lastUpdatedBy', 'createdAt', 'updatedAt'])
-          && data.id is string && isValidId(data.id)
-          && data.workspaceId == wId
-          && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
-          && data.createdBy is string && isValidId(data.createdBy)
-          && data.lastUpdatedBy == request.auth.uid
-          && data.createdAt is timestamp
-          && data.updatedAt is timestamp;
-      }
-
-      match /territories/{territoryId} {
-        allow get, list: if isValidId(workspaceId);
-        allow create: if isSignedIn()
-          && isValidId(workspaceId)
-          && isValidId(territoryId)
-          && isValidTerritory(incoming(), workspaceId)
-          && incoming().id == territoryId
-          && incoming().workspaceId == workspaceId
-          && incoming().createdBy == request.auth.uid
-          && incoming().lastUpdatedBy == request.auth.uid
-          && incoming().createdAt == request.time
-          && incoming().updatedAt == request.time;
-        allow update: if isSignedIn()
-          && isValidId(workspaceId)
-          && isValidId(territoryId)
-          && isValidTerritory(incoming(), workspaceId)
-          && incoming().id == existing().id
-          && incoming().workspaceId == existing().workspaceId
-          && incoming().createdBy == existing().createdBy
-          && incoming().lastUpdatedBy == request.auth.uid
-          && incoming().createdAt == existing().createdAt
-          && incoming().updatedAt == request.time
-          && incoming().diff(existing()).affectedKeys().hasOnly([
-            'name', 'lastUpdatedBy', 'updatedAt'
-          ]);
-        // Client deletion disabled to preserve person-to-territory links
-        allow delete: if false;
-      }
+    match /territories/{territoryId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && isValidId(territoryId)
+        && incoming().id == territoryId
+        && incoming().name is string && incoming().name.size() >= 1 && incoming().name.size() <= 100
+        && incoming().createdBy == request.auth.uid
+        && incoming().lastUpdatedBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedIn()
+        && isValidId(territoryId)
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().lastUpdatedBy == request.auth.uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().name is string && incoming().name.size() >= 1 && incoming().name.size() <= 100
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'lastUpdatedBy', 'updatedAt'
+        ]);
+      allow delete: if isSignedIn();
     }
   }
 }

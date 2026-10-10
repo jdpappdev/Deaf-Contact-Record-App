@@ -123,13 +123,16 @@ describe('[SIMULATION] Simplified Workspace Rules Logic Simulation Suite', () =>
   it('11. [SIMULATION] Shadow fields rejection on shared records', () => {
     const allowedKeys = [
       'id', 'workspaceId', 'createdBy', 'lastUpdatedBy', 'name',
-      'photoRef', 'latitude', 'longitude', 'territoryId', 'messengerUrl', 'createdAt', 'updatedAt'
+      'photoRef', 'photoDataUrl', 'latitude', 'longitude', 'territoryId', 'messengerUrl', 'createdAt', 'updatedAt'
     ];
     const maliciousPayloadKeys = [
       'id', 'workspaceId', 'createdBy', 'lastUpdatedBy', 'name', 'isAdmin', 'createdAt', 'updatedAt'
     ];
     const hasShadowField = maliciousPayloadKeys.some(k => !allowedKeys.includes(k));
     assert.equal(hasShadowField, true, 'Shadow fields like isAdmin must be rejected by hasOnly');
+
+    // Verify photoDataUrl is among permitted keys
+    assert.equal(allowedKeys.includes('photoDataUrl'), true, 'photoDataUrl must be permitted for profile pictures');
   });
 
   it('12. [SIMULATION] Length boundaries and Denial-of-Wallet prevention', () => {
@@ -140,6 +143,10 @@ describe('[SIMULATION] Simplified Workspace Rules Logic Simulation Suite', () =>
     const maxRemarks = 2000;
     const oversizedRemarks = 'R'.repeat(2001);
     assert.equal(oversizedRemarks.length > maxRemarks, true);
+
+    const maxPhotoDataUrl = 400000;
+    const oversizedPhoto = 'data:image/webp;base64,' + 'A'.repeat(400001);
+    assert.equal(oversizedPhoto.length > maxPhotoDataUrl, true, 'Oversized photo payload rejected');
   });
 
   it('13. [SIMULATION] Referential integrity: visits must reference existing person', () => {

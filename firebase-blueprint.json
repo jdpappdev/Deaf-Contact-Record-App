@@ -160,6 +160,11 @@
           "maxLength": 128,
           "description": "Reference identifier to stored photo asset."
         },
+        "photoDataUrl": {
+          "type": "string",
+          "maxLength": 400000,
+          "description": "Compressed base64 data URL of the contact profile image."
+        },
         "latitude": {
           "type": "number",
           "description": "Geographic latitude coordinate."
