@@ -19,6 +19,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { ConfirmDialog } from '../common/ConfirmDialog';
 
 export const SettingsView: React.FC = () => {
   const {
@@ -36,7 +37,10 @@ export const SettingsView: React.FC = () => {
     people,
     visits,
     territories,
+    clearAllData,
   } = useApp();
+
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const [authMode, setAuthMode] = useState<'signin' | 'forgot'>('signin');
   const [email, setEmail] = useState('');
@@ -192,15 +196,24 @@ export const SettingsView: React.FC = () => {
             {/* Storage Section */}
             <div className="mt-6 pt-6 border-t border-[#E7E3DA]">
               <h2 className="text-base font-bold text-slate-900 tracking-tight mb-4">Storage</h2>
-              <div className="flex gap-8 text-sm">
-                <div>
-                  <p className="text-slate-500">Contacts on this device</p>
-                  <p className="font-bold text-slate-900 text-lg">{people.length}</p>
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex gap-8 text-sm">
+                  <div>
+                    <p className="text-slate-500">Contacts on this device</p>
+                    <p className="font-bold text-slate-900 text-lg">{people.length}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Visits recorded</p>
+                    <p className="font-bold text-slate-900 text-lg">{visits.length}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-slate-500">Visits recorded</p>
-                  <p className="font-bold text-slate-900 text-lg">{visits.length}</p>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowClearConfirm(true)}
+                  className="px-4 py-2 bg-white text-sm font-semibold text-rose-600 hover:bg-rose-50 border border-rose-300 rounded-[10px] transition-colors"
+                >
+                  Clear All Data
+                </button>
               </div>
             </div>
 
@@ -398,6 +411,19 @@ export const SettingsView: React.FC = () => {
         </div>
         <div className="text-center text-xs text-slate-400 mt-8 mb-4">Deaf Contact Record · v1.0.0</div>
       </main>
+
+      <ConfirmDialog
+        isOpen={showClearConfirm}
+        title="Clear all local data?"
+        message="This will permanently delete all local contacts, visits, and territories from this device. This cannot be undone."
+        confirmLabel="Clear All Data"
+        isDestructive={true}
+        onCancel={() => setShowClearConfirm(false)}
+        onConfirm={async () => {
+          setShowClearConfirm(false);
+          await clearAllData();
+        }}
+      />
     </div>
   );
 };

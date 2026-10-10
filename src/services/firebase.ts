@@ -1,6 +1,8 @@
 import { initializeApp } from 'firebase/app';
 import {
   getAuth,
+  setPersistence,
+  browserLocalPersistence,
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
   signOut,
@@ -8,7 +10,9 @@ import {
   User as FirebaseUser,
 } from 'firebase/auth';
 import {
-  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   doc,
   getDocFromServer,
   getDoc,
@@ -24,8 +28,15 @@ import { Person, Visit, Territory } from '../types';
 
 // 1. Initialize Firebase App & Services
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRITICAL: The app will break without this line */
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+}, firebaseConfig.firestoreDatabaseId); /* CRITICAL: The app will break without this line */
 export const auth = getAuth(app);
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  console.warn('Failed to set auth persistence:', err);
+});
 
 // 2. Validate Connection to Firestore on boot as mandated
 export async function testConnection(): Promise<boolean> {

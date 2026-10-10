@@ -181,7 +181,23 @@ export async function pushVisitToFirestore(
     if (localPerson) {
       await pushPersonToFirestore(userId, localPerson);
     } else {
-      throw new Error(`Referenced contact "${visit.personId}" does not exist in shared storage.`);
+      const stubPerson: Person = {
+        id: visit.personId,
+        name: 'Contact ' + visit.personId.substring(0, 6),
+        photoRef: null,
+        latitude: null,
+        longitude: null,
+        territoryId: null,
+        messengerUrl: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      try {
+        await personService.save(stubPerson);
+        await pushPersonToFirestore(userId, stubPerson);
+      } catch (err) {
+        console.warn('[Sync] Failed to create stub person for visit:', err);
+      }
     }
   }
 
@@ -296,9 +312,11 @@ export async function processOutboxQueue(
           }
         } else if (op.operationType === 'delete') {
           if (op.entityType === 'visit') {
-            await deleteVisitFromFirestore(user.uid, op.entityId);
-          } else {
-            console.info(`[Sync Engine] Cloud delete skipped for ${op.entityType} "${op.entityId}" per security policy.`);
+            await deleteDoc(doc(db, 'visits', op.entityId));
+          } else if (op.entityType === 'person') {
+            await deleteDoc(doc(db, 'people', op.entityId));
+          } else if (op.entityType === 'territory') {
+            await deleteDoc(doc(db, 'territories', op.entityId));
           }
         }
 
@@ -384,6 +402,14 @@ export async function pullAndReconcileUserData(
   let unchangedCount = 0;
   const skippedCount = 0;
 
+  // Gather any pending local delete operations to prevent deleted entities from reappearing
+  const allSyncOps = await syncQueueService.getAll();
+  const deletedEntityIds = new Set(
+    allSyncOps
+      .filter((op) => op.operationType === 'delete' && (op.status === 'pending' || op.status === 'processing'))
+      .map((op) => op.entityId)
+  );
+
   // 1. Reconcile Territories
   const remoteTerritoriesMap = new Map<string, Territory>();
   if (territoriesSnap) {
@@ -395,7 +421,9 @@ export async function pullAndReconcileUserData(
         createdAt: timestampToISO(data.createdAt),
         updatedAt: timestampToISO(data.updatedAt),
       };
-      remoteTerritoriesMap.set(terr.id, terr);
+      if (!deletedEntityIds.has(terr.id)) {
+        remoteTerritoriesMap.set(terr.id, terr);
+      }
     }
   }
 
@@ -403,6 +431,7 @@ export async function pullAndReconcileUserData(
   const localTerritoriesMap = new Map<string, Territory>(localTerritories.map((t: Territory) => [t.id, t]));
 
   for (const [id, remoteTerr] of remoteTerritoriesMap.entries() as IterableIterator<[string, Territory]>) {
+    if (deletedEntityIds.has(id)) continue;
     const localTerr = localTerritoriesMap.get(id);
     if (!localTerr) {
       await territoryService.save(remoteTerr);
@@ -436,9 +465,11 @@ export async function pullAndReconcileUserData(
         createdAt: timestampToISO(data.createdAt),
         updatedAt: timestampToISO(data.updatedAt),
       };
-      remotePeopleMap.set(person.id, person);
+      if (!deletedEntityIds.has(person.id)) {
+        remotePeopleMap.set(person.id, person);
+      }
 
-      if (person.photoRef && person.photoDataUrl) {
+      if (person.photoRef && person.photoDataUrl && !deletedEntityIds.has(person.id)) {
         try {
           const existingPhoto = await photoService.getPhoto(person.photoRef);
           if (!existingPhoto) {
@@ -455,6 +486,7 @@ export async function pullAndReconcileUserData(
   const localPeopleMap = new Map<string, Person>(localPeople.map((p: Person) => [p.id, p]));
 
   for (const [id, remotePerson] of remotePeopleMap.entries() as IterableIterator<[string, Person & { photoDataUrl?: string | null }]>) {
+    if (deletedEntityIds.has(id)) continue;
     const localPerson = localPeopleMap.get(id);
     if (!localPerson) {
       await personService.save(remotePerson);
@@ -484,7 +516,7 @@ export async function pullAndReconcileUserData(
         createdAt: timestampToISO(data.createdAt),
         updatedAt: timestampToISO(data.updatedAt),
       };
-      if (visit.personId) {
+      if (visit.personId && !deletedEntityIds.has(visit.id)) {
         remoteVisitsMap.set(visit.id, visit);
       }
     }
@@ -494,6 +526,7 @@ export async function pullAndReconcileUserData(
   const localVisitsMap = new Map<string, Visit>(localVisits.map((v: Visit) => [v.id, v]));
 
   for (const [id, remoteVisit] of remoteVisitsMap.entries() as IterableIterator<[string, Visit]>) {
+    if (deletedEntityIds.has(id)) continue;
     const localVisit = localVisitsMap.get(id);
     if (!localVisit) {
       await visitService.save(remoteVisit);
@@ -595,18 +628,30 @@ export async function promoteLocalDataToCloud(
   let reconciledTerritories = 0;
 
   for (const terr of allTerritories) {
-    await pushTerritoryToFirestore(user.uid, terr);
-    reconciledTerritories++;
+    try {
+      await pushTerritoryToFirestore(user.uid, terr);
+      reconciledTerritories++;
+    } catch (err) {
+      console.warn('[Sync] Failed to promote territory:', terr.id, err);
+    }
   }
 
   for (const person of allPeople) {
-    await pushPersonToFirestore(user.uid, person);
-    reconciledPeople++;
+    try {
+      await pushPersonToFirestore(user.uid, person);
+      reconciledPeople++;
+    } catch (err) {
+      console.warn('[Sync] Failed to promote person:', person.id, err);
+    }
   }
 
   for (const visit of allVisits) {
-    await pushVisitToFirestore(user.uid, visit);
-    reconciledVisits++;
+    try {
+      await pushVisitToFirestore(user.uid, visit);
+      reconciledVisits++;
+    } catch (err) {
+      console.warn('[Sync] Failed to promote visit:', visit.id, err);
+    }
   }
 
   await processOutboxQueue(user);

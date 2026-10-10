@@ -393,9 +393,15 @@ export const personService = {
       }
     };
 
-    return new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
+    });
+
+    await syncQueueService.enqueue({
+      entityType: 'person',
+      entityId: id,
+      operationType: 'delete',
     });
   },
 };
@@ -447,6 +453,11 @@ export const visitService = {
 
   async delete(id: string): Promise<void> {
     await deleteFromStore(STORES.VISITS, id);
+    await syncQueueService.enqueue({
+      entityType: 'visit',
+      entityId: id,
+      operationType: 'delete',
+    });
   },
 };
 
@@ -507,9 +518,15 @@ export const territoryService = {
       }
     };
 
-    return new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
+    });
+
+    await syncQueueService.enqueue({
+      entityType: 'territory',
+      entityId: id,
+      operationType: 'delete',
     });
   },
 };

@@ -7,6 +7,7 @@ import {
   territoryService,
   photoService,
   syncQueueService,
+  backupService,
 } from '../services/dataService';
 import {
   auth,
@@ -84,6 +85,7 @@ interface AppContextType {
 
   // Photo actions
   loadPhotoUrl: (photoRef: string | null) => Promise<string | null>;
+  clearAllData: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -603,6 +605,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, []);
 
+  const clearAllData = useCallback(async () => {
+    await backupService.clearAllData();
+    await refreshData();
+    await updatePendingCount();
+    showToast('All local data cleared', 'info');
+  }, [refreshData, updatePendingCount, showToast]);
+
   return (
     <AppContext.Provider
       value={{
@@ -644,6 +653,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         saveTerritory,
         deleteTerritory,
         loadPhotoUrl,
+        clearAllData,
       }}
     >
       {children}
