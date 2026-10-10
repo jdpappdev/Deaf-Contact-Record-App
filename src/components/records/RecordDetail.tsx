@@ -37,6 +37,7 @@ export const RecordDetail: React.FC<RecordDetailProps> = ({ person, onBack }) =>
     deleteVisit,
     showToast,
     loadPhotoUrl,
+    requestAuthGate,
   } = useApp();
 
   const [isEditingContact, setIsEditingContact] = useState(false);
@@ -64,6 +65,7 @@ export const RecordDetail: React.FC<RecordDetailProps> = ({ person, onBack }) =>
 
   // Delete contact confirmation
   const handleConfirmDeleteContact = async () => {
+    if (!requestAuthGate('delete contacts')) return;
     try {
       setIsDeleting(true);
       await deletePerson(person.id);
@@ -80,6 +82,7 @@ export const RecordDetail: React.FC<RecordDetailProps> = ({ person, onBack }) =>
 
   // Location update in detail view
   const handleUpdateLocation = () => {
+    if (!requestAuthGate('update contact location')) return;
     if (!navigator.geolocation) {
       showToast('Geolocation is not supported on this device', 'error');
       return;
@@ -220,9 +223,11 @@ export const RecordDetail: React.FC<RecordDetailProps> = ({ person, onBack }) =>
                     type="button"
                     onClick={() => {
                       setIsHeaderMenuOpen(false);
-                      setIsEditingContact(true);
+                      if (requestAuthGate('edit contacts')) {
+                        setIsEditingContact(true);
+                      }
                     }}
-                    className="w-full min-h-[44px] px-4 py-2 text-left text-sm font-semibold text-[#14213D] hover:bg-slate-50 flex items-center gap-2.5 transition-colors"
+                    className="w-full min-h-[44px] px-4 py-2 text-left text-sm font-semibold text-[#14213D] hover:bg-slate-50 flex items-center gap-2.5 transition-colors cursor-pointer"
                   >
                     <Edit2 className="w-4 h-4 text-[#5B6470]" />
                     <span>Edit contact</span>
@@ -231,9 +236,11 @@ export const RecordDetail: React.FC<RecordDetailProps> = ({ person, onBack }) =>
                     type="button"
                     onClick={() => {
                       setIsHeaderMenuOpen(false);
-                      setShowDeleteContactDialog(true);
+                      if (requestAuthGate('delete contacts')) {
+                        setShowDeleteContactDialog(true);
+                      }
                     }}
-                    className="w-full min-h-[44px] px-4 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
+                    className="w-full min-h-[44px] px-4 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors cursor-pointer"
                   >
                     <Trash2 className="w-4 h-4 text-red-500" />
                     <span>Delete contact</span>
@@ -414,8 +421,12 @@ export const RecordDetail: React.FC<RecordDetailProps> = ({ person, onBack }) =>
 
                 <button
                   type="button"
-                  onClick={() => setIsAddingVisit(true)}
-                  className="min-h-[44px] px-3.5 py-2 text-sm font-semibold text-[#0F766E] hover:bg-[#0F766E]/10 rounded-[12px] flex items-center gap-1.5 transition-colors"
+                  onClick={() => {
+                    if (requestAuthGate('record visits')) {
+                      setIsAddingVisit(true);
+                    }
+                  }}
+                  className="min-h-[44px] px-3.5 py-2 text-sm font-semibold text-[#0F766E] hover:bg-[#0F766E]/10 rounded-[12px] flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <Plus className="w-4 h-4 stroke-[2.5]" />
                   <span>Add visit</span>
@@ -431,7 +442,11 @@ export const RecordDetail: React.FC<RecordDetailProps> = ({ person, onBack }) =>
                   </p>
                   <div className="mt-4">
                     <PrimaryButton
-                      onClick={() => setIsAddingVisit(true)}
+                      onClick={() => {
+                        if (requestAuthGate('record visits')) {
+                          setIsAddingVisit(true);
+                        }
+                      }}
                       icon={<Plus className="w-5 h-5 stroke-[2.5]" />}
                     >
                       Record first visit
@@ -487,9 +502,11 @@ export const RecordDetail: React.FC<RecordDetailProps> = ({ person, onBack }) =>
                                     type="button"
                                     onClick={() => {
                                       setOpenVisitMenuId(null);
-                                      setEditingVisit(visit);
+                                      if (requestAuthGate('edit visits')) {
+                                        setEditingVisit(visit);
+                                      }
                                     }}
-                                    className="w-full min-h-[44px] px-3.5 py-2 text-left text-sm font-semibold text-[#14213D] hover:bg-slate-50 flex items-center gap-2 transition-colors"
+                                    className="w-full min-h-[44px] px-3.5 py-2 text-left text-sm font-semibold text-[#14213D] hover:bg-slate-50 flex items-center gap-2 transition-colors cursor-pointer"
                                   >
                                     <Edit2 className="w-3.5 h-3.5 text-[#5B6470]" />
                                     <span>Edit</span>
@@ -498,9 +515,11 @@ export const RecordDetail: React.FC<RecordDetailProps> = ({ person, onBack }) =>
                                     type="button"
                                     onClick={() => {
                                       setOpenVisitMenuId(null);
-                                      setVisitToDelete(visit);
+                                      if (requestAuthGate('delete visits')) {
+                                        setVisitToDelete(visit);
+                                      }
                                     }}
-                                    className="w-full min-h-[44px] px-3.5 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+                                    className="w-full min-h-[44px] px-3.5 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors cursor-pointer"
                                   >
                                     <Trash2 className="w-3.5 h-3.5 text-red-500" />
                                     <span>Delete</span>

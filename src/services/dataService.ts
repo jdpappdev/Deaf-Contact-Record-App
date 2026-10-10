@@ -1,4 +1,16 @@
-import { Person, Visit, Territory, PhotoAsset, BackupData, PersonInput, VisitInput, TerritoryInput } from '../types';
+import {
+  Person,
+  Visit,
+  Territory,
+  PhotoAsset,
+  BackupData,
+  PersonInput,
+  VisitInput,
+  TerritoryInput,
+  SyncOperation,
+  SyncEntityType,
+  SyncOperationType,
+} from '../types';
 import {
   getDatabase,
   getFromStore,
@@ -314,8 +326,12 @@ export const personService = {
       longitude: typeof data.longitude === 'number' && !isNaN(data.longitude) ? data.longitude : null,
       territoryId: data.territoryId || null,
       messengerUrl: data.messengerUrl ? data.messengerUrl.trim() : null,
-      createdAt: existing ? existing.createdAt : now,
-      updatedAt: now,
+      createdAt: data.createdAt || (existing ? existing.createdAt : now),
+      updatedAt: data.updatedAt || now,
+      workspaceId: data.workspaceId || existing?.workspaceId || undefined,
+      createdBy: data.createdBy || existing?.createdBy || undefined,
+      lastUpdatedBy: data.lastUpdatedBy || existing?.lastUpdatedBy || undefined,
+      isLocalOnly: data.isLocalOnly !== undefined ? data.isLocalOnly : (existing?.isLocalOnly ?? (data.workspaceId ? false : true)),
     };
 
     await putInStore(STORES.PEOPLE, person);
@@ -393,8 +409,12 @@ export const visitService = {
       personId: data.personId,
       visitedAt: data.visitedAt,
       remarks: (data.remarks || '').trim(),
-      createdAt: existing ? existing.createdAt : now,
-      updatedAt: now,
+      createdAt: data.createdAt || (existing ? existing.createdAt : now),
+      updatedAt: data.updatedAt || now,
+      workspaceId: data.workspaceId || existing?.workspaceId || undefined,
+      createdBy: data.createdBy || existing?.createdBy || undefined,
+      lastUpdatedBy: data.lastUpdatedBy || existing?.lastUpdatedBy || undefined,
+      isLocalOnly: data.isLocalOnly !== undefined ? data.isLocalOnly : (existing?.isLocalOnly ?? (data.workspaceId ? false : true)),
     };
 
     await putInStore(STORES.VISITS, visit);
@@ -428,8 +448,12 @@ export const territoryService = {
     const territory: Territory = {
       id: data.id || generateId(),
       name: data.name.trim(),
-      createdAt: existing ? existing.createdAt : now,
-      updatedAt: now,
+      createdAt: data.createdAt || (existing ? existing.createdAt : now),
+      updatedAt: data.updatedAt || now,
+      workspaceId: data.workspaceId || existing?.workspaceId || undefined,
+      createdBy: data.createdBy || existing?.createdBy || undefined,
+      lastUpdatedBy: data.lastUpdatedBy || existing?.lastUpdatedBy || undefined,
+      isLocalOnly: data.isLocalOnly !== undefined ? data.isLocalOnly : (existing?.isLocalOnly ?? (data.workspaceId ? false : true)),
     };
 
     await putInStore(STORES.TERRITORIES, territory);
@@ -590,5 +614,121 @@ export const backupService = {
 
   async clearAllData(): Promise<void> {
     await clearAllStores();
+  },
+};
+
+// Sync Queue Service - durable outbox queue management for reliable offline sync
+export const syncQueueService = {
+  async getAll(): Promise<SyncOperation[]> {
+    return getAllFromStore<SyncOperation>(STORES.SYNC_QUEUE);
+  },
+
+  async getPending(): Promise<SyncOperation[]> {
+    const pending = await getByIndex<SyncOperation>(STORES.SYNC_QUEUE, 'status', 'pending');
+    // Sort oldest first (FIFO order)
+    return pending.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  },
+
+  async getById(id: string): Promise<SyncOperation | null> {
+    return getFromStore<SyncOperation>(STORES.SYNC_QUEUE, id);
+  },
+
+  async getByEntity(entityType: SyncEntityType, entityId: string): Promise<SyncOperation[]> {
+    return getByIndex<SyncOperation>(STORES.SYNC_QUEUE, 'entityType_entityId', [entityType, entityId]);
+  },
+
+  async countPending(): Promise<number> {
+    const pending = await this.getPending();
+    return pending.length;
+  },
+
+  /**
+   * Enqueues an operation into the durable IndexedDB outbox.
+   * Handles deduplication safely: if an operation is already pending for this entity,
+   * updates it rather than duplicating writes.
+   */
+  async enqueue(op: {
+    entityType: SyncEntityType;
+    entityId: string;
+    operationType: SyncOperationType;
+    payload?: Record<string, unknown> | null;
+    workspaceId?: string;
+  }): Promise<SyncOperation> {
+    const existingOps = await this.getByEntity(op.entityType, op.entityId);
+    const pendingOp = existingOps.find((o) => o.status === 'pending' || o.status === 'processing');
+
+    const now = new Date().toISOString();
+
+    if (pendingOp) {
+      // Coalesce / deduplicate into existing pending operation
+      const updatedOp: SyncOperation = {
+        ...pendingOp,
+        operationType: op.operationType,
+        payload: op.payload !== undefined ? op.payload : pendingOp.payload,
+        status: 'pending',
+        clientTimestamp: now,
+        workspaceId: op.workspaceId || pendingOp.workspaceId || 'default',
+        errorMessage: null,
+      };
+      await putInStore(STORES.SYNC_QUEUE, updatedOp);
+      return updatedOp;
+    }
+
+    const newOp: SyncOperation = {
+      id: generateId(),
+      entityType: op.entityType,
+      entityId: op.entityId,
+      operationType: op.operationType,
+      payload: op.payload || null,
+      createdAt: now,
+      status: 'pending',
+      retryCount: 0,
+      lastAttemptAt: null,
+      errorMessage: null,
+      clientTimestamp: now,
+      workspaceId: op.workspaceId || 'default',
+    };
+
+    await putInStore(STORES.SYNC_QUEUE, newOp);
+    return newOp;
+  },
+
+  async markProcessing(id: string): Promise<void> {
+    const op = await this.getById(id);
+    if (op) {
+      op.status = 'processing';
+      op.lastAttemptAt = new Date().toISOString();
+      await putInStore(STORES.SYNC_QUEUE, op);
+    }
+  },
+
+  async markCompleted(id: string): Promise<void> {
+    // Remove completed operations from queue to keep outbox clean and performant
+    await deleteFromStore(STORES.SYNC_QUEUE, id);
+  },
+
+  async markFailed(id: string, errorMessage: string): Promise<void> {
+    const op = await this.getById(id);
+    if (op) {
+      op.retryCount += 1;
+      op.errorMessage = errorMessage;
+      op.lastAttemptAt = new Date().toISOString();
+      // Keep in 'pending' status so subsequent sync attempts pick it up with exponential backoff
+      op.status = op.retryCount > 10 ? 'failed' : 'pending';
+      await putInStore(STORES.SYNC_QUEUE, op);
+    }
+  },
+
+  async remove(id: string): Promise<void> {
+    await deleteFromStore(STORES.SYNC_QUEUE, id);
+  },
+
+  async clearCompleted(): Promise<void> {
+    const all = await this.getAll();
+    for (const op of all) {
+      if (op.status === 'completed') {
+        await deleteFromStore(STORES.SYNC_QUEUE, op.id);
+      }
+    }
   },
 };

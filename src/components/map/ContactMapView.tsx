@@ -11,7 +11,7 @@ import {
   ExternalLink,
   ChevronRight,
   User,
-  List,
+  Menu,
 } from 'lucide-react';
 
 // Safeguard Leaflet against undefined map elements and race conditions during transition teardown
@@ -283,14 +283,15 @@ export const ContactMapView: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowCoordinateList(!showCoordinateList)}
-            className={`min-h-[44px] px-3.5 py-2 text-sm font-semibold rounded-[14px] border transition-colors flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer ${
+            className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-[14px] border transition-colors flex items-center justify-center shrink-0 shadow-xs cursor-pointer ${
               showCoordinateList
                 ? 'bg-[#14213D] text-white border-[#14213D]'
                 : 'bg-white text-[#14213D] border-[#E7E3DA] hover:bg-slate-50'
             }`}
+            aria-label="Coordinates"
+            title="Coordinates"
           >
-            <List className="w-4 h-4" />
-            <span>Coordinates</span>
+            <Menu className="w-5 h-5" />
           </button>
         </div>
       </header>

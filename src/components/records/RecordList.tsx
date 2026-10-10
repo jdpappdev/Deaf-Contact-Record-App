@@ -7,7 +7,7 @@ import { PrimaryButton, PrimaryFAB } from '../common/PrimaryButton';
 import { Search, Plus, UserPlus, Filter, X } from 'lucide-react';
 
 export const RecordList: React.FC = () => {
-  const { people, territories, visits, setSelectedPersonId } = useApp();
+  const { people, territories, visits, setSelectedPersonId, requestAuthGate } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -329,7 +329,11 @@ export const RecordList: React.FC = () => {
 
       {/* Modern Circular FAB for Add Contact with e3 elevation */}
       <PrimaryFAB
-        onClick={() => setIsAddModalOpen(true)}
+        onClick={() => {
+          if (requestAuthGate('add contacts')) {
+            setIsAddModalOpen(true);
+          }
+        }}
         ariaLabel="Add contact"
       />
 

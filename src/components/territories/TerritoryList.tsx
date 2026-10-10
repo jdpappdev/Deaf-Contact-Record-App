@@ -24,6 +24,7 @@ export const TerritoryList: React.FC = () => {
     showToast,
     setSelectedPersonId,
     setActiveTab,
+    requestAuthGate,
   } = useApp();
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -58,6 +59,7 @@ export const TerritoryList: React.FC = () => {
 
   const handleCreateTerritory = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!requestAuthGate('create territories')) return;
     if (!newTerritoryName.trim()) return;
 
     try {
@@ -71,23 +73,24 @@ export const TerritoryList: React.FC = () => {
   };
 
   const handleInitiateEdit = (terr: Territory) => {
+    if (!requestAuthGate('edit territories')) return;
     setEditingTerritory(terr);
     setEditTerritoryName(terr.name);
   };
 
   const handleRequestSaveEdit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!requestAuthGate('edit territories')) return;
     if (!editTerritoryName.trim()) return;
     if (editingTerritory && editTerritoryName.trim() === editingTerritory.name) {
       setEditingTerritory(null);
       return;
     }
-    // Prompt confirmation per instructions:
-    // "The confirmation should remind the user to contact the Admin before making structural territory changes."
     setShowEditConfirmDialog(true);
   };
 
   const handleConfirmEdit = async () => {
+    if (!requestAuthGate('edit territories')) return;
     if (!editingTerritory) return;
     try {
       await saveTerritory({
@@ -103,6 +106,7 @@ export const TerritoryList: React.FC = () => {
   };
 
   const handleConfirmDelete = async () => {
+    if (!requestAuthGate('delete territories')) return;
     if (!territoryToDelete) return;
     try {
       await deleteTerritory(territoryToDelete.id);
@@ -244,9 +248,11 @@ export const TerritoryList: React.FC = () => {
                               type="button"
                               onClick={() => {
                                 setOpenMenuTerritoryId(null);
-                                handleInitiateEdit(terr);
+                                if (requestAuthGate('edit territories')) {
+                                  handleInitiateEdit(terr);
+                                }
                               }}
-                              className="w-full min-h-[44px] px-3.5 py-2 text-left text-sm font-semibold text-[#14213D] hover:bg-slate-50 flex items-center gap-2.5 transition-colors"
+                              className="w-full min-h-[44px] px-3.5 py-2 text-left text-sm font-semibold text-[#14213D] hover:bg-slate-50 flex items-center gap-2.5 transition-colors cursor-pointer"
                             >
                               <Edit2 className="w-4 h-4 text-[#5B6470]" />
                               <span>Rename</span>
@@ -255,9 +261,11 @@ export const TerritoryList: React.FC = () => {
                               type="button"
                               onClick={() => {
                                 setOpenMenuTerritoryId(null);
-                                setTerritoryToDelete(terr);
+                                if (requestAuthGate('delete territories')) {
+                                  setTerritoryToDelete(terr);
+                                }
                               }}
-                              className="w-full min-h-[44px] px-3.5 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
+                              className="w-full min-h-[44px] px-3.5 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors cursor-pointer"
                             >
                               <Trash2 className="w-4 h-4 text-red-500" />
                               <span>Delete</span>
@@ -278,7 +286,11 @@ export const TerritoryList: React.FC = () => {
 
       {/* Modern Circular FAB for Add Territory matching Contacts FAB exactly */}
       <PrimaryFAB
-        onClick={() => setIsAddModalOpen(true)}
+        onClick={() => {
+          if (requestAuthGate('create territories')) {
+            setIsAddModalOpen(true);
+          }
+        }}
         ariaLabel="Add territory"
       />
 

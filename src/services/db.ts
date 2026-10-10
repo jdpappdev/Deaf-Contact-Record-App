@@ -4,13 +4,14 @@
  */
 
 const DB_NAME = 'DeafContactRecordDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const STORES = {
   PEOPLE: 'people',
   VISITS: 'visits',
   TERRITORIES: 'territories',
   PHOTOS: 'photos',
+  SYNC_QUEUE: 'sync_queue',
 } as const;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -65,14 +66,29 @@ export function getDatabase(): Promise<IDBDatabase> {
         }
       }
 
-      // Explicit Version 2 Blueprint (reserved for future sync preparation):
-      // if (oldVersion < 2) {
-      //   // Will idempotently create sync_queue and tombstones without modifying existing stores
-      // }
+      // Version 2 Migration: Sync preparation (sync_queue store)
+      // Preserves all existing records in people, visits, territories, and photos without changes.
+      if (oldVersion < 2) {
+        if (!db.objectStoreNames.contains(STORES.SYNC_QUEUE)) {
+          const syncQueueStore = db.createObjectStore(STORES.SYNC_QUEUE, { keyPath: 'id' });
+          syncQueueStore.createIndex('createdAt', 'createdAt', { unique: false });
+          syncQueueStore.createIndex('status', 'status', { unique: false });
+          syncQueueStore.createIndex('entityType', 'entityType', { unique: false });
+          syncQueueStore.createIndex('entityId', 'entityId', { unique: false });
+          syncQueueStore.createIndex('entityType_entityId', ['entityType', 'entityId'], { unique: false });
+          syncQueueStore.createIndex('status_createdAt', ['status', 'createdAt'], { unique: false });
+        }
+      }
     };
 
     request.onsuccess = () => {
-      resolve(request.result);
+      const db = request.result;
+      // Close database connection if another tab/version requests an upgrade, preventing locks
+      db.onversionchange = () => {
+        db.close();
+        dbPromise = null;
+      };
+      resolve(db);
     };
 
     request.onerror = () => {
@@ -80,8 +96,8 @@ export function getDatabase(): Promise<IDBDatabase> {
       reject(request.error || new Error('Failed to open IndexedDB.'));
     };
 
-    request.onblocked = () => {
-      console.warn('Database open request was blocked. Please close other open tabs of this app.');
+    request.onblocked = (event) => {
+      console.warn('Database upgrade was blocked. Please close other open tabs/windows of this app.', event);
     };
   });
 

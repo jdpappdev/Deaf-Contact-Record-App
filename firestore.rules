@@ -1,0 +1,261 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Shared Workspace Master Gate
+    // Requires an authenticated user with a membership document whose status is exactly 'approved'
+    function isApprovedMember(workspaceId) {
+      return isSignedIn()
+        && isValidId(workspaceId)
+        && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid))
+        && get(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.status == 'approved';
+    }
+
+    // Test doc probe for client connection verification
+    match /test/{docId} {
+      allow get: if true;
+    }
+
+    // User profiles (retained for user metadata and backward compatibility)
+    function isValidUser(data, userId) {
+      return data.keys().hasAll(['id', 'email', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'email', 'displayName', 'photoURL', 'createdAt', 'updatedAt'])
+        && data.id == userId
+        && data.email is string && data.email.size() <= 254
+        && (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() <= 100))
+        && (!('photoURL' in data) || data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 1000))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && isValidUser(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isOwner(userId)
+        && isValidUser(incoming(), userId)
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt']);
+      allow delete: if false;
+
+      // Legacy per-user paths: preserve read/delete for migration safety; deny new writes
+      match /people/{personId} {
+        allow get, list, delete: if isOwner(userId);
+        allow create, update: if false;
+      }
+      match /visits/{visitId} {
+        allow get, list, delete: if isOwner(userId);
+        allow create, update: if false;
+      }
+      match /territories/{territoryId} {
+        allow get, list, delete: if isOwner(userId);
+        allow create, update: if false;
+      }
+    }
+
+    // ==========================================
+    // SHARED WORKSPACE SPECIFICATION (Phase 3E)
+    // Guest Read-Only Access & Authorized Editing
+    // ==========================================
+
+    match /workspaces/{workspaceId} {
+      // Workspace root metadata: guests, unapproved users, and approved members can read
+      // Client creation/update/deletion is denied (provisioned via Firebase Console / Admin SDK)
+      allow get: if isValidId(workspaceId);
+      allow list, create, update, delete: if false;
+
+      // 1. Members Subcollection
+      // - Authenticated users can read their own membership record to check approval status.
+      // - Approved members can also read fellow membership records and list members in their workspace.
+      // - Guests (unauthenticated) and unauthorized third parties CANNOT read membership records.
+      // - Client-side create, update, and delete are strictly denied.
+      //   Membership approval is managed manually through Firebase Console.
+      match /members/{memberId} {
+        allow get: if isValidId(workspaceId)
+          && isValidId(memberId)
+          && isSignedIn()
+          && (request.auth.uid == memberId || isApprovedMember(workspaceId));
+        allow list: if isValidId(workspaceId) && isApprovedMember(workspaceId);
+        allow create, update, delete: if false;
+      }
+
+      // 2. Shared People (Contacts)
+      // - Read: Guests, unapproved users, and approved members can get and list contacts.
+      // - Write: Only authenticated, approved members can create and update valid contacts.
+      // - Delete: Client deletion strictly disabled to prevent orphaned visit history.
+      function isValidPerson(data, wId) {
+        return data.keys().hasAll(['id', 'workspaceId', 'createdBy', 'lastUpdatedBy', 'name', 'createdAt', 'updatedAt'])
+          && data.keys().hasOnly(['id', 'workspaceId', 'createdBy', 'lastUpdatedBy', 'name', 'photoRef', 'latitude', 'longitude', 'territoryId', 'messengerUrl', 'createdAt', 'updatedAt'])
+          && data.id is string && isValidId(data.id)
+          && data.workspaceId == wId
+          && data.createdBy is string && isValidId(data.createdBy)
+          && data.lastUpdatedBy == request.auth.uid
+          && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
+          && (!('photoRef' in data) || data.photoRef == null || (data.photoRef is string && data.photoRef.size() <= 128))
+          && (!('latitude' in data) || data.latitude == null || (data.latitude is number && data.latitude >= -90.0 && data.latitude <= 90.0))
+          && (!('longitude' in data) || data.longitude == null || (data.longitude is number && data.longitude >= -180.0 && data.longitude <= 180.0))
+          && (!('territoryId' in data) || data.territoryId == null || (data.territoryId is string && isValidId(data.territoryId)))
+          && (!('messengerUrl' in data) || data.messengerUrl == null || (data.messengerUrl is string && data.messengerUrl.size() <= 500))
+          && data.createdAt is timestamp
+          && data.updatedAt is timestamp;
+      }
+
+      match /people/{personId} {
+        allow get, list: if isValidId(workspaceId);
+        allow create: if isApprovedMember(workspaceId)
+          && isValidId(personId)
+          && isValidPerson(incoming(), workspaceId)
+          && incoming().id == personId
+          && incoming().workspaceId == workspaceId
+          && incoming().createdBy == request.auth.uid
+          && incoming().lastUpdatedBy == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && (
+            !('territoryId' in incoming())
+            || incoming().territoryId == null
+            || exists(/databases/$(database)/documents/workspaces/$(workspaceId)/territories/$(incoming().territoryId))
+          );
+        allow update: if isApprovedMember(workspaceId)
+          && isValidId(personId)
+          && isValidPerson(incoming(), workspaceId)
+          && incoming().id == existing().id
+          && incoming().workspaceId == existing().workspaceId
+          && incoming().createdBy == existing().createdBy
+          && incoming().lastUpdatedBy == request.auth.uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'photoRef', 'latitude', 'longitude', 'territoryId', 'messengerUrl', 'lastUpdatedBy', 'updatedAt'
+          ])
+          && (
+            !('territoryId' in incoming())
+            || incoming().territoryId == null
+            || incoming().territoryId == existing().territoryId
+            || exists(/databases/$(database)/documents/workspaces/$(workspaceId)/territories/$(incoming().territoryId))
+          );
+        // Client deletion disabled to prevent orphaned visit history and preserve audit trail
+        allow delete: if false;
+      }
+
+      // 3. Shared Visits
+      // - Read: Guests, unapproved users, and approved members can get and list visits.
+      // - Write: Only authenticated, approved members can create and update valid visits.
+      // - Delete: Only authenticated, approved members can delete visits with valid ID.
+      function isValidVisit(data, wId) {
+        return data.keys().hasAll(['id', 'workspaceId', 'personId', 'visitedAt', 'remarks', 'createdBy', 'lastUpdatedBy', 'createdAt', 'updatedAt'])
+          && data.keys().hasOnly(['id', 'workspaceId', 'personId', 'visitedAt', 'remarks', 'createdBy', 'lastUpdatedBy', 'createdAt', 'updatedAt'])
+          && data.id is string && isValidId(data.id)
+          && data.workspaceId == wId
+          && data.personId is string && isValidId(data.personId)
+          && data.visitedAt is string && data.visitedAt.size() <= 50
+          && data.remarks is string && data.remarks.size() <= 2000
+          && data.createdBy is string && isValidId(data.createdBy)
+          && data.lastUpdatedBy == request.auth.uid
+          && data.createdAt is timestamp
+          && data.updatedAt is timestamp;
+      }
+
+      match /visits/{visitId} {
+        allow get, list: if isValidId(workspaceId);
+        allow create: if isApprovedMember(workspaceId)
+          && isValidId(visitId)
+          && isValidVisit(incoming(), workspaceId)
+          && incoming().id == visitId
+          && incoming().workspaceId == workspaceId
+          && incoming().createdBy == request.auth.uid
+          && incoming().lastUpdatedBy == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/people/$(incoming().personId));
+        allow update: if isApprovedMember(workspaceId)
+          && isValidId(visitId)
+          && isValidVisit(incoming(), workspaceId)
+          && incoming().id == existing().id
+          && incoming().workspaceId == existing().workspaceId
+          && incoming().personId == existing().personId
+          && incoming().createdBy == existing().createdBy
+          && incoming().lastUpdatedBy == request.auth.uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'visitedAt', 'remarks', 'lastUpdatedBy', 'updatedAt'
+          ]);
+        allow delete: if isApprovedMember(workspaceId) && isValidId(visitId);
+      }
+
+      // 4. Shared Territories
+      // - Read: Guests, unapproved users, and approved members can get and list territories.
+      // - Write: Only authenticated, approved members can create and update valid territories.
+      // - Delete: Client deletion strictly disabled to preserve person-to-territory links.
+      function isValidTerritory(data, wId) {
+        return data.keys().hasAll(['id', 'workspaceId', 'name', 'createdBy', 'lastUpdatedBy', 'createdAt', 'updatedAt'])
+          && data.keys().hasOnly(['id', 'workspaceId', 'name', 'createdBy', 'lastUpdatedBy', 'createdAt', 'updatedAt'])
+          && data.id is string && isValidId(data.id)
+          && data.workspaceId == wId
+          && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
+          && data.createdBy is string && isValidId(data.createdBy)
+          && data.lastUpdatedBy == request.auth.uid
+          && data.createdAt is timestamp
+          && data.updatedAt is timestamp;
+      }
+
+      match /territories/{territoryId} {
+        allow get, list: if isValidId(workspaceId);
+        allow create: if isApprovedMember(workspaceId)
+          && isValidId(territoryId)
+          && isValidTerritory(incoming(), workspaceId)
+          && incoming().id == territoryId
+          && incoming().workspaceId == workspaceId
+          && incoming().createdBy == request.auth.uid
+          && incoming().lastUpdatedBy == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isApprovedMember(workspaceId)
+          && isValidId(territoryId)
+          && isValidTerritory(incoming(), workspaceId)
+          && incoming().id == existing().id
+          && incoming().workspaceId == existing().workspaceId
+          && incoming().createdBy == existing().createdBy
+          && incoming().lastUpdatedBy == request.auth.uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'lastUpdatedBy', 'updatedAt'
+          ]);
+        // Client deletion disabled to preserve person-to-territory links
+        allow delete: if false;
+      }
+    }
+  }
+}

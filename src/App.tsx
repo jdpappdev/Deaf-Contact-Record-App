@@ -18,6 +18,8 @@ const MainAppContent: React.FC = () => {
     people,
     territories,
     isLoading,
+    user,
+    signOut,
   } = useApp();
 
   if (isLoading) {
@@ -157,11 +159,47 @@ const MainAppContent: React.FC = () => {
         </div>
 
         {/* Sidebar Footer */}
-        <div className="p-5 border-t border-[#E7E3DA]">
-          <div className="flex items-center justify-between text-xs text-[#5B6470]">
-            <span className="font-medium">IndexedDB Local</span>
-            <span className="font-mono">v1.0.0</span>
-          </div>
+        <div className="p-4 border-t border-[#E7E3DA]">
+          {user ? (
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                {user.photoURL ? (
+                  <img
+                    src={user.photoURL}
+                    alt={user.displayName || user.email || 'User'}
+                    className="w-6 h-6 rounded-full border border-slate-200 shrink-0"
+                  />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-[#0F766E] text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+                    {(user.displayName || user.email || 'U')[0].toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="font-semibold text-slate-800 truncate leading-tight">
+                    {user.displayName || user.email?.split('@')[0]}
+                  </p>
+                  <p className="text-[10px] text-emerald-600 font-medium">Cloud Synced</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => signOut()}
+                className="text-[11px] text-slate-400 hover:text-rose-600 cursor-pointer ml-1"
+                title="Sign Out"
+              >
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setActiveTab('settings')}
+              className="w-full py-2 px-2.5 rounded-[10px] bg-slate-50 hover:bg-slate-100 border border-[#E7E3DA] text-xs font-semibold text-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-colors"
+            >
+              <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+              <span>Sign In (Settings)</span>
+            </button>
+          )}
         </div>
       </aside>
 
@@ -262,10 +300,21 @@ const MainAppContent: React.FC = () => {
         </nav>
 
         {/* Right Info Spacer for balanced centering */}
-        <div className="shrink-0 min-w-[180px] flex justify-end">
-          <span className="text-xs font-mono text-[#5B6470] bg-[#F3F1EC] px-2.5 py-1 rounded-[10px] border border-[#E7E3DA]/60">
-            Local DB
-          </span>
+        <div className="shrink-0 min-w-[180px] flex justify-end items-center gap-2">
+          {user ? (
+            <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200/80 px-2 py-1 rounded-[10px] text-xs font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              <span className="truncate max-w-[100px]">{user.displayName || user.email?.split('@')[0] || 'Synced'}</span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setActiveTab('settings')}
+              className="text-xs font-semibold text-[#0F766E] hover:text-[#0D655E] bg-teal-50 px-2.5 py-1 rounded-[10px] border border-teal-200 cursor-pointer"
+            >
+              Sign In
+            </button>
+          )}
         </div>
       </header>
 

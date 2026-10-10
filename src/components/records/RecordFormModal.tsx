@@ -201,6 +201,15 @@ export const RecordFormModal: React.FC<RecordFormModalProps> = ({
       setIsSaving(true);
       setFormError(null);
 
+      if (latitude !== null && (latitude < -90 || latitude > 90)) {
+        setFormError('Latitude must be between -90 and 90.');
+        return;
+      }
+      if (longitude !== null && (longitude < -180 || longitude > 180)) {
+        setFormError('Longitude must be between -180 and 180.');
+        return;
+      }
+
       const saved = await savePerson({
         id: initialPerson?.id,
         name: name.trim(),
@@ -377,48 +386,46 @@ export const RecordFormModal: React.FC<RecordFormModalProps> = ({
                 )}
               </div>
 
-              {latitude !== null && longitude !== null ? (
-                <div className="space-y-3">
-                  <div className="text-sm text-[#14213D] bg-[#F3F1EC]/60 p-3 rounded-[12px] border border-[#E7E3DA] flex items-center justify-between">
-                    <div>
-                      <span className="font-bold text-[#14213D]">Coordinates: </span>
-                      <span className="font-mono text-[#5B6470]">{latitude}, {longitude}</span>
-                    </div>
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="min-h-[44px] px-3 py-1.5 text-[#0F766E] hover:underline text-sm flex items-center gap-1 font-semibold"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      <span>View</span>
-                    </a>
+              {/* Inputs always shown */}
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-[#5B6470] mb-1">Latitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="-90"
+                      max="90"
+                      value={latitude ?? ''}
+                      onChange={(e) => setLatitude(e.target.value === '' ? null : parseFloat(e.target.value))}
+                      placeholder="e.g. 14.5995"
+                      className="w-full h-10 px-3 text-sm font-mono text-[#14213D] bg-white border border-[#E7E3DA] rounded-[10px] focus:outline-none focus:ring-1 focus:ring-[#0F766E]"
+                    />
                   </div>
-                  <button
-                    type="button"
-                    disabled={isLocating}
-                    onClick={handleRequestLocation}
-                    className="w-full h-[52px] min-h-[52px] px-4 text-base font-semibold text-[#14213D] bg-white hover:bg-slate-50 border border-[#E7E3DA] rounded-[14px] flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-                  >
-                    <Navigation className={`w-4 h-4 ${isLocating ? 'animate-spin text-[#0F766E]' : 'text-[#0F766E]'}`} />
-                    <span>{isLocating ? 'Determining GPS...' : 'Update Location'}</span>
-                  </button>
+                  <div>
+                    <label className="block text-xs font-semibold text-[#5B6470] mb-1">Longitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="-180"
+                      max="180"
+                      value={longitude ?? ''}
+                      onChange={(e) => setLongitude(e.target.value === '' ? null : parseFloat(e.target.value))}
+                      placeholder="e.g. 120.9842"
+                      className="w-full h-10 px-3 text-sm font-mono text-[#14213D] bg-white border border-[#E7E3DA] rounded-[10px] focus:outline-none focus:ring-1 focus:ring-[#0F766E]"
+                    />
+                  </div>
                 </div>
-              ) : (
-                <div>
-                  <p className="text-sm text-[#5B6470] mb-3">
-                    No location recorded yet. Capture coordinates when you are visiting this contact in the field.
-                  </p>
-                  <PrimaryButton
-                    disabled={isLocating}
-                    onClick={handleRequestLocation}
-                    className="w-full !px-4"
-                    icon={<Navigation className={`w-4 h-4 ${isLocating ? 'animate-spin' : ''}`} />}
-                  >
-                    {isLocating ? 'Determining GPS...' : 'Get Current Location'}
-                  </PrimaryButton>
-                </div>
-              )}
+                <button
+                  type="button"
+                  disabled={isLocating}
+                  onClick={handleRequestLocation}
+                  className="w-full h-[52px] min-h-[52px] px-4 text-base font-semibold text-[#14213D] bg-white hover:bg-slate-50 border border-[#E7E3DA] rounded-[14px] flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                >
+                  <Navigation className={`w-4 h-4 ${isLocating ? 'animate-spin text-[#0F766E]' : 'text-[#0F766E]'}`} />
+                  <span>{isLocating ? 'Determining GPS...' : 'Autofill from GPS'}</span>
+                </button>
+              </div>
             </div>
 
             {/* Footer Buttons */}
