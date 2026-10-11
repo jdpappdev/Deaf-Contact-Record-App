@@ -37,10 +37,9 @@ export const SettingsView: React.FC = () => {
     people,
     visits,
     territories,
-    clearAllData,
   } = useApp();
 
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
 
   const [authMode, setAuthMode] = useState<'signin' | 'forgot'>('signin');
   const [email, setEmail] = useState('');
@@ -207,13 +206,7 @@ export const SettingsView: React.FC = () => {
                     <p className="font-bold text-slate-900 text-lg">{visits.length}</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowClearConfirm(true)}
-                  className="px-4 py-2 bg-white text-sm font-semibold text-rose-600 hover:bg-rose-50 border border-rose-300 rounded-[10px] transition-colors"
-                >
-                  Clear All Data
-                </button>
+
               </div>
             </div>
 
@@ -412,18 +405,7 @@ export const SettingsView: React.FC = () => {
         <div className="text-center text-xs text-slate-400 mt-8 mb-4">Deaf Contact Record · v1.0.0</div>
       </main>
 
-      <ConfirmDialog
-        isOpen={showClearConfirm}
-        title="Clear all local data?"
-        message="This will permanently delete all local contacts, visits, and territories from this device. This cannot be undone."
-        confirmLabel="Clear All Data"
-        isDestructive={true}
-        onCancel={() => setShowClearConfirm(false)}
-        onConfirm={async () => {
-          setShowClearConfirm(false);
-          await clearAllData();
-        }}
-      />
+
     </div>
   );
 };
