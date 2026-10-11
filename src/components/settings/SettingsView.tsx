@@ -196,15 +196,23 @@ export const SettingsView: React.FC = () => {
             <div className="mt-6 pt-6 border-t border-[#E7E3DA]">
               <h2 className="text-base font-bold text-slate-900 tracking-tight mb-4">Storage</h2>
               <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex gap-8 text-sm">
-                  <div>
-                    <p className="text-slate-500">Contacts on this device</p>
-                    <p className="font-bold text-slate-900 text-lg">{people.length}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500">Visits recorded</p>
-                    <p className="font-bold text-slate-900 text-lg">{visits.length}</p>
-                  </div>
+                <div className="w-full">
+                  <table className="w-full text-sm">
+                    <tbody>
+                      <tr>
+                        <td className="py-1 text-slate-500">Contacts on this device</td>
+                        <td className="py-1 text-right font-bold text-slate-900">{people.length}</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 text-slate-500">Visits recorded</td>
+                        <td className="py-1 text-right font-bold text-slate-900">{visits.length}</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 text-slate-500">Territories</td>
+                        <td className="py-1 text-right font-bold text-slate-900">{territories.length}</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
 
               </div>
